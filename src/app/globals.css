@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f4f5;
+  --foreground: #1c1c1e;
+
+  /* Strada MIV 2026 */
+  --strada-laranja: #f25929;
+  --strada-vinho: #730f12;
+  --strada-cinza: #73787a;
+  --strada-sidebar: #1c1c1e;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-strada-laranja: var(--strada-laranja);
+  --color-strada-vinho: var(--strada-vinho);
+  --color-strada-cinza: var(--strada-cinza);
+  --color-strada-sidebar: var(--strada-sidebar);
+  --font-sans: var(--font-montserrat);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+tbody tr:nth-child(even) {
+  background-color: rgba(0, 0, 0, 0.02);
+}
