@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogoStrada } from "@/components/LogoStrada";
 
-export default function LoginPage() {
+const MENSAGENS_ERRO_URL: Record<string, string> = {
+  usuario_sem_area:
+    "Login autenticado, mas este e-mail ainda não está vinculado a nenhuma área (tabela usuario). Peça para o administrador rodar o insert com o UUID correto.",
+};
+
+function FormularioLogin() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const [erro, setErro] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(
+    MENSAGENS_ERRO_URL[searchParams.get("erro") ?? ""] ?? null,
+  );
   const [carregando, setCarregando] = useState(false);
 
   async function entrar(e: React.FormEvent) {
@@ -26,7 +34,7 @@ export default function LoginPage() {
     setCarregando(false);
 
     if (error) {
-      setErro("E-mail ou senha inválidos.");
+      setErro(error.message);
       return;
     }
 
@@ -79,5 +87,13 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <FormularioLogin />
+    </Suspense>
   );
 }
