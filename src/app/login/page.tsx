@@ -38,7 +38,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-strada-sidebar">
       <div className="w-full max-w-sm rounded-lg bg-white p-8 shadow-lg">
         <div className="mb-6 flex justify-center">
-          <LogoStrada className="[&_span]:text-strada-vinho" />
+          <LogoStrada className="h-10" />
         </div>
         <h1 className="mb-6 text-center text-sm text-strada-cinza">
           Credenciamento &amp; KYC — acesso interno
