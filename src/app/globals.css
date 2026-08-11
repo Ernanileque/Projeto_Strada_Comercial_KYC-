@@ -4,10 +4,10 @@
   --background: #f4f4f5;
   --foreground: #1c1c1e;
 
-  /* Strada MIV 2026 */
-  --strada-laranja: #f25929;
-  --strada-vinho: #730f12;
-  --strada-cinza: #73787a;
+  /* Strada MIV 2026 — Pantone 166C / 1815C / CoolGray 9C (LOGOTIPO_Pantone166C_Strada) */
+  --strada-laranja: #e04814;
+  --strada-vinho: #832526;
+  --strada-cinza: #797d7d;
   --strada-sidebar: #1c1c1e;
 }
 
