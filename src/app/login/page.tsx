@@ -1,9 +1,11 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { LogoStrada } from "@/components/LogoStrada";
+import { CampoSenha } from "@/components/CampoSenha";
 
 const MENSAGENS_ERRO_URL: Record<string, string> = {
   usuario_sem_area:
@@ -64,17 +66,20 @@ function FormularioLogin() {
               className="w-full rounded border border-black/10 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none"
             />
           </div>
-          <div>
-            <label className="mb-1 block text-xs font-medium text-strada-cinza">
-              Senha
-            </label>
-            <input
-              type="password"
-              required
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              className="w-full rounded border border-black/10 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none"
-            />
+          <CampoSenha
+            id="senha"
+            label="Senha"
+            value={senha}
+            onChange={setSenha}
+            autoComplete="current-password"
+          />
+          <div className="flex justify-end">
+            <Link
+              href="/esqueci-senha"
+              className="text-xs text-strada-cinza hover:text-strada-laranja"
+            >
+              Esqueci minha senha
+            </Link>
           </div>
           {erro && <p className="text-xs text-strada-vinho">{erro}</p>}
           <button

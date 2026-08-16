@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const ROTAS_PUBLICAS = ["/login", "/portal"];
+const ROTAS_PUBLICAS = ["/login", "/portal", "/esqueci-senha", "/redefinir-senha"];
 
 function ehRotaPublica(pathname: string) {
   return ROTAS_PUBLICAS.some(
