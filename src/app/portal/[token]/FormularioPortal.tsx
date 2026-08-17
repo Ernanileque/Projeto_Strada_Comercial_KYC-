@@ -1,14 +1,17 @@
 "use client";
 
-import { useActionState, useRef, useState } from "react";
+import { useActionState, useMemo, useRef, useState } from "react";
 import { enviarFichaKyc } from "./actions";
 import { LogoStrada } from "@/components/LogoStrada";
 import {
   analisar,
+  conferir,
+  montarChecklist,
   textoDoPdf,
   type SocioExtraido,
   type AdministradorExtraido,
   type DadosEmpresaExtraidos,
+  type ResultadoAnalise,
 } from "@/lib/portal/extracao";
 
 const classeInput =
@@ -75,7 +78,7 @@ type SocioForm = {
   obs: string;
   auto?: boolean;
 };
-type Arquivo = { nome: string; tipo: string; aviso?: string };
+type Arquivo = { nome: string; tipo: string; aviso?: string; resultado?: ResultadoAnalise };
 
 const socioVazio = (): SocioForm => ({
   pessoa: "PF",
@@ -152,6 +155,34 @@ export function FormularioPortal({ token }: { token: string }) {
   const [socios, setSocios] = useState<SocioForm[]>([socioVazio()]);
   const [declaracoes, setDeclaracoes] = useState({ pep: false, procuracoes: false, veracidade: false });
 
+  const checklist = useMemo(
+    () => montarChecklist(arquivos.map((a) => a.tipo as Parameters<typeof montarChecklist>[0][number])),
+    [arquivos],
+  );
+
+  const conferencia = useMemo(
+    () =>
+      conferir({
+        empresa: { cnpj: empresa.cnpj, fatMes: empresa.fatMes, fatAno: empresa.fatAno },
+        capital: { totalQuotas: capital.totalQuotas },
+        socios: socios.map((s) => ({
+          pessoa: s.pessoa,
+          nome: s.nome,
+          doc: s.doc,
+          pct: s.pct,
+          quotas: s.quotas,
+          pep: s.pep,
+        })),
+        assinantes: assinantes.map((a) => ({ nome: a.nome, cpf: a.cpf })),
+        testemunha,
+        arquivos: arquivos.map((a) => ({
+          tipo: a.tipo as Parameters<typeof montarChecklist>[0][number],
+          resultado: a.resultado,
+        })),
+      }),
+    [empresa, capital, socios, assinantes, testemunha, arquivos],
+  );
+
   async function acao(_estadoAnterior: EstadoEnvio, formData: FormData) {
     formData.set(
       "dados_json",
@@ -188,6 +219,7 @@ export function FormularioPortal({ token }: { token: string }) {
 
       let tipo = "outro";
       let aviso: string | undefined;
+      let resultado: ResultadoAnalise | undefined;
 
       if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
         try {
@@ -198,6 +230,7 @@ export function FormularioPortal({ token }: { token: string }) {
             tipo = "outro";
             aviso = "PDF sem texto (digitalizado) — preencha os campos manualmente.";
           } else {
+            resultado = r;
             aplicarExtracao(r.empresa, r.socios, r.admins);
           }
         } catch {
@@ -208,7 +241,7 @@ export function FormularioPortal({ token }: { token: string }) {
         aviso = "Imagem anexada — dados não são lidos automaticamente.";
       }
       setArquivos((prev) =>
-        prev.map((a) => (a.nome === file.name ? { nome: file.name, tipo, aviso } : a)),
+        prev.map((a) => (a.nome === file.name ? { nome: file.name, tipo, aviso, resultado } : a)),
       );
     }
     setProcessando(false);
@@ -362,6 +395,32 @@ export function FormularioPortal({ token }: { token: string }) {
               ))}
             </ul>
           )}
+        </Secao>
+
+        <Secao numero="00b" titulo="Checklist de documentos">
+          <ul className="space-y-1.5">
+            {checklist.map((item) => (
+              <li key={item.tipo} className="flex items-center gap-2 text-sm">
+                <span
+                  className={
+                    item.presente
+                      ? "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+                      : item.obrigatorio
+                        ? "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-700"
+                        : "flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700"
+                  }
+                >
+                  {item.presente ? "✓" : item.obrigatorio ? "!" : "·"}
+                </span>
+                <span className={item.presente ? "text-strada-cinza line-through" : ""}>
+                  {item.rotulo}
+                </span>
+                {!item.obrigatorio && !item.presente && (
+                  <span className="text-[10px] uppercase tracking-wide text-amber-700">recomendado</span>
+                )}
+              </li>
+            ))}
+          </ul>
         </Secao>
 
         <Secao numero="01" titulo="Dados da empresa">
@@ -835,6 +894,38 @@ export function FormularioPortal({ token }: { token: string }) {
           </label>
         </Secao>
 
+        <Secao numero="10" titulo="Conferência automática">
+          {conferencia.erros.length === 0 && conferencia.alertas.length === 0 && (
+            <p className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              Nenhuma inconsistência encontrada até o momento.
+            </p>
+          )}
+          {conferencia.erros.length > 0 && (
+            <div className="rounded border border-red-200 bg-red-50 p-3">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wide text-red-800">
+                Erros — impedem o envio
+              </p>
+              <ul className="list-inside list-disc space-y-0.5 text-sm text-red-800">
+                {conferencia.erros.map((e, i) => (
+                  <li key={i}>{e}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {conferencia.alertas.length > 0 && (
+            <div className="rounded border border-amber-200 bg-amber-50 p-3">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-800">
+                Alertas — revisar, mas não impedem o envio
+              </p>
+              <ul className="list-inside list-disc space-y-0.5 text-sm text-amber-800">
+                {conferencia.alertas.map((a, i) => (
+                  <li key={i}>{a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Secao>
+
         {estado && "erro" in estado && (
           <p className="rounded border border-strada-vinho/30 bg-red-50 p-3 text-sm text-strada-vinho">
             {estado.erro}
@@ -843,10 +934,14 @@ export function FormularioPortal({ token }: { token: string }) {
 
         <button
           type="submit"
-          disabled={enviando || processando}
+          disabled={enviando || processando || conferencia.erros.length > 0}
           className="w-full rounded bg-strada-laranja py-3 text-sm font-medium text-white disabled:opacity-60"
         >
-          {enviando ? "Enviando…" : "Enviar ao Compliance"}
+          {enviando
+            ? "Enviando…"
+            : conferencia.erros.length > 0
+              ? "Corrija os erros da conferência automática para enviar"
+              : "Enviar ao Compliance"}
         </button>
       </form>
     </div>

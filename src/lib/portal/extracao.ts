@@ -752,6 +752,160 @@ export function validarEmail(v: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v || "").trim());
 }
 
+/* ---------- checklist de documentos ---------- */
+export interface ItemChecklist {
+  tipo: TipoDocumentoDetectado;
+  rotulo: string;
+  obrigatorio: boolean;
+  presente: boolean;
+}
+
+const REQUISITOS_DOCUMENTOS: { tipo: TipoDocumentoDetectado; rotulo: string; obrigatorio: boolean }[] = [
+  { tipo: "contrato", rotulo: "Contrato social ou última alteração", obrigatorio: true },
+  { tipo: "cartaoCnpj", rotulo: "Cartão CNPJ", obrigatorio: true },
+  { tipo: "cnh", rotulo: "Documento pessoal dos assinantes (RG/CNH)", obrigatorio: true },
+  { tipo: "qsa", rotulo: "Quadro de sócios e administradores (QSA)", obrigatorio: false },
+];
+
+export function montarChecklist(tiposPresentes: TipoDocumentoDetectado[]): ItemChecklist[] {
+  const presentes = new Set(tiposPresentes);
+  return REQUISITOS_DOCUMENTOS.map((r) => ({ ...r, presente: presentes.has(r.tipo) }));
+}
+
+/* ---------- conferência automática ---------- */
+export interface SocioConferencia {
+  pessoa: "PF" | "PJ";
+  nome: string;
+  doc: string;
+  pct: string;
+  quotas: string;
+  pep: string;
+}
+
+export interface AssinanteConferencia {
+  nome: string;
+  cpf: string;
+}
+
+export interface ConferenciaEntrada {
+  empresa: { cnpj: string; fatMes: string; fatAno: string };
+  capital: { totalQuotas: string };
+  socios: SocioConferencia[];
+  assinantes: AssinanteConferencia[];
+  testemunha: { nome: string; cpf: string };
+  arquivos: { tipo: TipoDocumentoDetectado; resultado?: ResultadoAnalise }[];
+}
+
+export interface ConferenciaResultado {
+  erros: string[];
+  alertas: string[];
+}
+
+function numeroBr(v?: string): number {
+  return parseFloat(String(v || "").replace(/\./g, "").replace(",", ".")) || 0;
+}
+
+export function conferir(e: ConferenciaEntrada): ConferenciaResultado {
+  const erros: string[] = [];
+  const alertas: string[] = [];
+
+  if (e.empresa.cnpj && !validarCnpj(e.empresa.cnpj)) {
+    erros.push("CNPJ da empresa é inválido (dígito verificador não confere).");
+  }
+
+  e.socios.forEach((s) => {
+    if (!s.doc) return;
+    const valido = s.pessoa === "PF" ? validarCpf(s.doc) : validarCnpj(s.doc);
+    if (!valido) {
+      erros.push(
+        `${s.pessoa === "PF" ? "CPF" : "CNPJ"} de ${s.nome || "sócio sem nome"} é inválido (dígito verificador não confere).`,
+      );
+    }
+  });
+
+  e.assinantes.forEach((a) => {
+    if (a.cpf && !validarCpf(a.cpf)) {
+      erros.push(`CPF de ${a.nome || "assinante sem nome"} é inválido (dígito verificador não confere).`);
+    }
+  });
+
+  if (e.testemunha.cpf && !validarCpf(e.testemunha.cpf)) {
+    erros.push("CPF da testemunha é inválido (dígito verificador não confere).");
+  }
+
+  const cpfTestemunha = soDigitos(e.testemunha.cpf);
+  if (cpfTestemunha && e.assinantes.some((a) => soDigitos(a.cpf) === cpfTestemunha)) {
+    erros.push("A testemunha não pode ser a mesma pessoa que um assinante.");
+  }
+
+  const somaPct = e.socios.reduce((acc, s) => acc + numeroBr(s.pct), 0);
+  if (e.socios.some((s) => s.pct) && Math.abs(somaPct - 100) > 0.5) {
+    erros.push(`A soma dos percentuais dos sócios é ${somaPct.toFixed(2)}%, deveria ser 100%.`);
+  }
+
+  const totalQuotas = numeroBr(e.capital.totalQuotas);
+  const somaQuotas = e.socios.reduce((acc, s) => acc + numeroBr(s.quotas), 0);
+  if (totalQuotas && somaQuotas && Math.abs(somaQuotas - totalQuotas) > 0.5) {
+    erros.push(
+      `A soma das quotas dos sócios (${somaQuotas.toLocaleString("pt-BR")}) não bate com o total de quotas informado (${totalQuotas.toLocaleString("pt-BR")}).`,
+    );
+  }
+
+  e.socios.forEach((s) => {
+    if (s.pep === "Sim") {
+      alertas.push(
+        `${s.nome || "Sócio"} foi declarado como Pessoa Exposta Politicamente — due diligence reforçada necessária.`,
+      );
+    }
+  });
+
+  const fatMes = numeroBr(e.empresa.fatMes);
+  const fatAno = numeroBr(e.empresa.fatAno);
+  if (fatMes && fatAno) {
+    const divergencia = Math.abs(fatMes * 12 - fatAno) / fatAno;
+    if (divergencia > 0.3) {
+      alertas.push(
+        "O faturamento mensal x 12 diverge bastante do faturamento anual informado — confirmar os valores.",
+      );
+    }
+  }
+
+  const cartao = e.arquivos.find((a) => a.tipo === "cartaoCnpj" && a.resultado)?.resultado;
+  if (cartao?.empresa.situacao && cartao.empresa.situacao !== "ATIVA") {
+    erros.push(`A situação cadastral da empresa no cartão CNPJ está ${cartao.empresa.situacao}, não ATIVA.`);
+  }
+  if (cartao?.empresa.cnpj && e.empresa.cnpj && soDigitos(cartao.empresa.cnpj) !== soDigitos(e.empresa.cnpj)) {
+    erros.push("O CNPJ informado na ficha diverge do CNPJ do cartão CNPJ anexado.");
+  }
+
+  const qsaResultado = e.arquivos.find((a) => a.resultado?.qsa)?.resultado;
+  if (qsaResultado?.qsa) {
+    const docsFicha = new Set(
+      [...e.socios.map((s) => soDigitos(s.doc)), ...e.assinantes.map((a) => soDigitos(a.cpf))].filter(Boolean),
+    );
+    qsaResultado.qsa.forEach((p) => {
+      if (p.mascarado) return;
+      const doc = soDigitos(p.doc);
+      if (doc && !docsFicha.has(doc)) {
+        alertas.push(
+          `${p.nome} consta no quadro de sócios e administradores da Receita (QSA), mas não foi declarado na ficha.`,
+        );
+      }
+    });
+  }
+
+  const checklist = montarChecklist(e.arquivos.map((a) => a.tipo));
+  checklist
+    .filter((item) => !item.presente)
+    .forEach((item) => {
+      const mensagem = `Documento obrigatório não anexado: ${item.rotulo}.`;
+      if (item.obrigatorio) erros.push(mensagem);
+      else alertas.push(`Documento recomendado não anexado: ${item.rotulo}.`);
+    });
+
+  return { erros, alertas };
+}
+
 /* ---------- leitura do PDF no navegador ---------- */
 export async function textoDoPdf(file: File): Promise<string> {
   const pdfjsLib = await import("pdfjs-dist");
