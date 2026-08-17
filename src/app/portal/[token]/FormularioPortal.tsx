@@ -8,6 +8,8 @@ import {
   conferir,
   montarChecklist,
   textoDoPdf,
+  textoPdfViaOcr,
+  textoImagemViaOcr,
   type SocioExtraido,
   type AdministradorExtraido,
   type DadosEmpresaExtraidos,
@@ -78,7 +80,13 @@ type SocioForm = {
   obs: string;
   auto?: boolean;
 };
-type Arquivo = { nome: string; tipo: string; aviso?: string; resultado?: ResultadoAnalise };
+type Arquivo = {
+  nome: string;
+  tipo: string;
+  aviso?: string;
+  resultado?: ResultadoAnalise;
+  viaOcr?: boolean;
+};
 
 const socioVazio = (): SocioForm => ({
   pessoa: "PF",
@@ -217,31 +225,51 @@ export function FormularioPortal({ token }: { token: string }) {
       arquivosRef.current.set(file.name, file);
       setArquivos((prev) => [...prev, { nome: file.name, tipo: "outro" }]);
 
-      let tipo = "outro";
+      const ehPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+      let tipo = ehPdf ? "outro" : "imagem";
       let aviso: string | undefined;
       let resultado: ResultadoAnalise | undefined;
+      let viaOcr = false;
 
-      if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
-        try {
+      try {
+        let r: ResultadoAnalise | undefined;
+
+        if (ehPdf) {
           const texto = await textoDoPdf(file);
-          const r = analisar(texto, file.name);
-          tipo = r.tipo;
-          if (!r.temTexto) {
-            tipo = "outro";
-            aviso = "PDF sem texto (digitalizado) — preencha os campos manualmente.";
-          } else {
-            resultado = r;
-            aplicarExtracao(r.empresa, r.socios, r.admins);
-          }
-        } catch {
-          aviso = "Não foi possível ler este PDF — preencha os campos manualmente.";
+          r = analisar(texto, file.name);
         }
-      } else {
-        tipo = "imagem";
-        aviso = "Imagem anexada — dados não são lidos automaticamente.";
+
+        if (!r || !r.temTexto) {
+          setArquivos((prev) =>
+            prev.map((a) =>
+              a.nome === file.name
+                ? { ...a, aviso: "Documento sem texto — lendo por OCR (pode levar alguns segundos)…" }
+                : a,
+            ),
+          );
+          const textoOcr = ehPdf ? await textoPdfViaOcr(file) : await textoImagemViaOcr(file);
+          const rOcr = analisar(textoOcr, file.name);
+          if (rOcr.temTexto) {
+            r = rOcr;
+            viaOcr = true;
+          }
+        }
+
+        if (r && r.temTexto) {
+          tipo = r.tipo;
+          resultado = r;
+          aviso = viaOcr ? "Lido por OCR — confira os dados preenchidos." : undefined;
+          aplicarExtracao(r.empresa, r.socios, r.admins);
+        } else {
+          tipo = ehPdf ? "outro" : "imagem";
+          aviso = "Não foi possível ler este documento (nem por OCR) — preencha os campos manualmente.";
+        }
+      } catch {
+        aviso = "Não foi possível ler este arquivo — preencha os campos manualmente.";
       }
+
       setArquivos((prev) =>
-        prev.map((a) => (a.nome === file.name ? { nome: file.name, tipo, aviso, resultado } : a)),
+        prev.map((a) => (a.nome === file.name ? { nome: file.name, tipo, aviso, resultado, viaOcr } : a)),
       );
     }
     setProcessando(false);
@@ -390,6 +418,11 @@ export function FormularioPortal({ token }: { token: string }) {
                   <span className="shrink-0 rounded bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-emerald-800">
                     {ROTULO_TIPO[a.tipo] ?? a.tipo}
                   </span>
+                  {a.viaOcr && (
+                    <span className="shrink-0 rounded bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-blue-800">
+                      OCR
+                    </span>
+                  )}
                   {a.aviso && <span className="text-[11px] text-amber-700">{a.aviso}</span>}
                 </li>
               ))}

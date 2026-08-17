@@ -5,6 +5,8 @@
  * reais registrados em junta comercial.
  */
 
+import type { Worker as TesseractWorker } from "tesseract.js";
+
 export type TipoDocumentoDetectado =
   | "contrato"
   | "cartaoCnpj"
@@ -923,4 +925,57 @@ export async function textoDoPdf(file: File): Promise<string> {
     texto += ` ${conteudo.items.map((i) => ("str" in i ? i.str : "")).join(" ")}`;
   }
   return texto;
+}
+
+/* ---------- OCR (fallback para digitalizados ou PDFs sem texto real) ---------- */
+/**
+ * Alguns documentos (ex.: página impressa como PDF via "Microsoft Print
+ * to PDF", ou fotos/scans anexados como imagem) não têm nenhum texto
+ * selecionável — só desenhos vetoriais ou pixels. Nesses casos caímos
+ * pra OCR (Tesseract.js, roda no navegador, sem servidor).
+ */
+let workerOcrPromise: Promise<TesseractWorker> | null = null;
+
+async function obterWorkerOcr(): Promise<TesseractWorker> {
+  if (!workerOcrPromise) {
+    const { createWorker } = await import("tesseract.js");
+    workerOcrPromise = createWorker("por");
+  }
+  return workerOcrPromise;
+}
+
+const MAX_PAGINAS_OCR = 6;
+
+export async function textoPdfViaOcr(file: File): Promise<string> {
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    "pdfjs-dist/build/pdf.worker.min.mjs",
+    import.meta.url,
+  ).toString();
+
+  const worker = await obterWorkerOcr();
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+  const paginas = Math.min(pdf.numPages, MAX_PAGINAS_OCR);
+
+  let texto = "";
+  for (let p = 1; p <= paginas; p++) {
+    const pagina = await pdf.getPage(p);
+    const viewport = pagina.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const contexto = canvas.getContext("2d");
+    if (!contexto) continue;
+    await pagina.render({ canvasContext: contexto, viewport, canvas }).promise;
+    const resultado = await worker.recognize(canvas);
+    texto += ` ${resultado.data.text}`;
+  }
+  return texto;
+}
+
+export async function textoImagemViaOcr(file: File): Promise<string> {
+  const worker = await obterWorkerOcr();
+  const resultado = await worker.recognize(file);
+  return resultado.data.text;
 }
