@@ -20,18 +20,8 @@ function FormularioLogin() {
   const supabase = createClient();
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
-  const uidDiagnostico = searchParams.get("uid");
-  const detalheDiagnostico = searchParams.get("detalhe");
   const [erro, setErro] = useState<string | null>(
-    (() => {
-      const mensagem = MENSAGENS_ERRO_URL[searchParams.get("erro") ?? ""];
-      if (!mensagem) return null;
-      const partes = [
-        uidDiagnostico ? `uid: ${uidDiagnostico}` : null,
-        detalheDiagnostico ? `detalhe: ${detalheDiagnostico}` : null,
-      ].filter(Boolean);
-      return partes.length ? `${mensagem} (${partes.join(" | ")})` : mensagem;
-    })(),
+    MENSAGENS_ERRO_URL[searchParams.get("erro") ?? ""] ?? null,
   );
   const [carregando, setCarregando] = useState(false);
 
