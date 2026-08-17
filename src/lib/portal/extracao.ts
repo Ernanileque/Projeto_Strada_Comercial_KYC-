@@ -765,6 +765,7 @@ export interface ItemChecklist {
 const REQUISITOS_DOCUMENTOS: { tipo: TipoDocumentoDetectado; rotulo: string; obrigatorio: boolean }[] = [
   { tipo: "contrato", rotulo: "Contrato social ou última alteração", obrigatorio: true },
   { tipo: "cartaoCnpj", rotulo: "Cartão CNPJ", obrigatorio: true },
+  { tipo: "proposta", rotulo: "Proposta comercial aceita", obrigatorio: true },
   { tipo: "cnh", rotulo: "Documento pessoal dos assinantes (RG/CNH)", obrigatorio: true },
   { tipo: "qsa", rotulo: "Quadro de sócios e administradores (QSA)", obrigatorio: false },
 ];

@@ -39,7 +39,7 @@ const MAPA_TIPO_DOCUMENTO: Record<string, string> = {
   sintegra: "outro",
   cnh: "rg_cnh_representante",
   procuracao: "outro",
-  proposta: "outro",
+  proposta: "proposta_comercial",
   imagem: "outro",
   outro: "outro",
 };
