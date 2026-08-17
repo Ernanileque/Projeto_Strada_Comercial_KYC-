@@ -113,9 +113,9 @@ export function classificar(texto: string, nomeArquivo?: string): TipoDocumentoD
       /\bCNH\b/.test(n))
   )
     return "cnh";
+  if (/QUADRO DE S..IOS E ADMINISTRADORES|QSA/.test(t) || /QSA/.test(n)) return "qsa";
   if (/COMPROVANTE DE INSCRI..O E DE SITUA..O CADASTRAL|CADASTRO NACIONAL DA PESSOA JUR/.test(t))
     return "cartaoCnpj";
-  if (/QUADRO DE S..IOS E ADMINISTRADORES|QSA/.test(t) || /QSA/.test(n)) return "qsa";
   if (/CONSULTA P..LICA . REDESIM|SINTEGRA/.test(t)) return "sintegra";
   if (
     /CONTRATO DE CONSTITUI..O|ALTERA..O E CONSOLIDA..O DO CONTRATO SOCIAL|CONTRATO SOCIAL|ESTATUTO SOCIAL/.test(
