@@ -8,7 +8,7 @@ export default async function DiretoriaComercialPage() {
   const { data: credenciamentos } = await supabase
     .from("credenciamento")
     .select(
-      "id, tipo_contrato, taxa_frete, taxa_vpo, permanencia_minima_meses, parte_relacionada, aprovado_conselho, criado_em, cliente:cliente_id(razao_social, cnpj)",
+      "id, tipo_contrato, taxa_frete, taxa_vpo, permanencia_minima_meses, criado_em, cliente:cliente_id(razao_social, cnpj)",
     )
     .eq("status", "AGUARDANDO_APROVACAO_DIRETORIA")
     .order("criado_em", { ascending: true });
@@ -62,16 +62,6 @@ export default async function DiretoriaComercialPage() {
                       : "—"}
                   </dd>
                 </div>
-                <div>
-                  <dt className="font-medium">Parte relacionada</dt>
-                  <dd>{c.parte_relacionada ? "Sim" : "Não"}</dd>
-                </div>
-                {c.parte_relacionada && (
-                  <div>
-                    <dt className="font-medium">Aprovado pelo conselho</dt>
-                    <dd>{c.aprovado_conselho ? "Sim" : "Não"}</dd>
-                  </div>
-                )}
               </dl>
 
               <div className="flex items-center gap-3">

@@ -31,10 +31,6 @@ export async function criarCredenciamento(formData: FormData) {
   const taxaVpo = numeroOuNulo(formData.get("taxa_vpo"));
   const permanenciaMinimaMeses = numeroOuNulo(formData.get("permanencia_minima_meses"));
 
-  const parteRelacionada = formData.get("parte_relacionada") === "on";
-  const aprovadoConselho = formData.get("aprovado_conselho") === "on";
-  const seguePoliticaConcorrencial = formData.get("segue_politica_concorrencial") === "on";
-
   const { data: cliente, error: erroCliente } = await supabase
     .from("cliente")
     .insert({
@@ -51,34 +47,17 @@ export async function criarCredenciamento(formData: FormData) {
     throw new Error(erroCliente?.message ?? "Erro ao criar cliente.");
   }
 
-  let status: string;
-  let motivoReprovacao: string | null = null;
-
-  if (parteRelacionada && !aprovadoConselho) {
-    status = "REPROVADO";
-    motivoReprovacao = "Parte relacionada sem aprovação do conselho.";
-  } else if (!seguePoliticaConcorrencial) {
-    status = "REPROVADO";
-    motivoReprovacao = "Não segue a política concorrencial da Strada.";
-  } else {
-    status = "AGUARDANDO_APROVACAO_DIRETORIA";
-  }
-
   const expiraEm = new Date();
   expiraEm.setDate(expiraEm.getDate() + 30);
 
   const { error: erroCredenciamento } = await supabase.from("credenciamento").insert({
     cliente_id: cliente.id,
-    status,
+    status: "AGUARDANDO_APROVACAO_DIRETORIA",
     tipo_contrato: tipoContrato || null,
     produtos_log: tipoContrato === "strada_log" ? produtosLog : null,
     taxa_frete: taxaFrete,
     taxa_vpo: taxaVpo,
     permanencia_minima_meses: permanenciaMinimaMeses,
-    parte_relacionada: parteRelacionada,
-    aprovado_conselho: parteRelacionada ? aprovadoConselho : null,
-    segue_politica_concorrencial: seguePoliticaConcorrencial,
-    motivo_reprovacao: motivoReprovacao,
     criado_por: user.id,
     expira_em: expiraEm.toISOString(),
   });

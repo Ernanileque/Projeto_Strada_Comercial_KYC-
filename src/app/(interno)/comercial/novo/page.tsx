@@ -26,7 +26,6 @@ const classeInput =
 
 export default function NovoCredenciamentoPage() {
   const [tipoContrato, setTipoContrato] = useState<string>("strada_pay");
-  const [parteRelacionada, setParteRelacionada] = useState(false);
 
   return (
     <div className="max-w-2xl">
@@ -115,39 +114,6 @@ export default function NovoCredenciamentoPage() {
               />
             </Campo>
           </div>
-        </section>
-
-        <section className="space-y-3 rounded border border-black/10 bg-white p-4">
-          <h3 className="text-sm font-semibold text-strada-vinho">
-            Governança (obrigatório antes da Diretoria Comercial)
-          </h3>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="parte_relacionada"
-              checked={parteRelacionada}
-              onChange={(e) => setParteRelacionada(e.target.checked)}
-            />
-            É parte relacionada?
-          </label>
-          {parteRelacionada && (
-            <label className="ml-6 flex items-center gap-2 text-sm">
-              <input type="checkbox" name="aprovado_conselho" />
-              Aprovado pelo conselho?
-            </label>
-          )}
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              name="segue_politica_concorrencial"
-              defaultChecked
-            />
-            Segue a política concorrencial?
-          </label>
-          <p className="text-xs text-strada-cinza">
-            Se parte relacionada sem aprovação do conselho, ou não seguir a
-            política concorrencial, o credenciamento já nasce reprovado.
-          </p>
         </section>
 
         <button
