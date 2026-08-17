@@ -18,5 +18,9 @@ export default async function Home() {
     .eq("id", user.id)
     .single();
 
-  redirect(usuario ? AREAS[usuario.area as Area].rota : "/login?erro=usuario_sem_area");
+  redirect(
+    usuario
+      ? AREAS[usuario.area as Area].rota
+      : `/login?erro=usuario_sem_area&uid=${user.id}`,
+  );
 }
