@@ -3,7 +3,6 @@ import type { Area } from "@/lib/areas";
 export type StatusCredenciamento =
   | "PROPOSTA_ACEITA"
   | "AGUARDANDO_CLIENTE"
-  | "AGUARDANDO_APROVACAO_DIRETORIA"
   | "EM_ANALISE"
   | "VALIDADO"
   | "DEVOLVIDO"
@@ -20,7 +19,6 @@ export const SLA_HORAS = 24;
 export const AREA_RESPONSAVEL: Record<StatusCredenciamento, Area | null> = {
   PROPOSTA_ACEITA: "comercial",
   AGUARDANDO_CLIENTE: null,
-  AGUARDANDO_APROVACAO_DIRETORIA: "diretoria_comercial",
   EM_ANALISE: "compliance",
   VALIDADO: "juridico",
   DEVOLVIDO: null,
@@ -35,7 +33,6 @@ export const AREA_RESPONSAVEL: Record<StatusCredenciamento, Area | null> = {
 export const STATUS_LABEL: Record<StatusCredenciamento, string> = {
   PROPOSTA_ACEITA: "Proposta aceita",
   AGUARDANDO_CLIENTE: "Aguardando cliente",
-  AGUARDANDO_APROVACAO_DIRETORIA: "Aguardando aprovação da Diretoria",
   EM_ANALISE: "Em análise (Compliance)",
   VALIDADO: "Validado",
   DEVOLVIDO: "Devolvido ao cliente",
@@ -51,7 +48,6 @@ export const STATUS_LABEL: Record<StatusCredenciamento, string> = {
 export const STATUS_COR: Record<StatusCredenciamento, string> = {
   PROPOSTA_ACEITA: "bg-gray-100 text-gray-700",
   AGUARDANDO_CLIENTE: "bg-amber-100 text-amber-800",
-  AGUARDANDO_APROVACAO_DIRETORIA: "bg-amber-100 text-amber-800",
   EM_ANALISE: "bg-blue-100 text-blue-800",
   VALIDADO: "bg-emerald-100 text-emerald-800",
   DEVOLVIDO: "bg-red-100 text-red-800",

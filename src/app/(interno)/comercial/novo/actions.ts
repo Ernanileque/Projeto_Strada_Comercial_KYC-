@@ -52,7 +52,7 @@ export async function criarCredenciamento(formData: FormData) {
 
   const { error: erroCredenciamento } = await supabase.from("credenciamento").insert({
     cliente_id: cliente.id,
-    status: "AGUARDANDO_APROVACAO_DIRETORIA",
+    status: "AGUARDANDO_CLIENTE",
     tipo_contrato: tipoContrato || null,
     produtos_log: tipoContrato === "strada_log" ? produtosLog : null,
     taxa_frete: taxaFrete,
