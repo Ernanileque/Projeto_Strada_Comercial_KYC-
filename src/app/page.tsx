@@ -9,7 +9,7 @@ export default async function Home() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/login?erro=sem_sessao_servidor");
   }
 
   const { data: usuario } = await supabase
@@ -18,5 +18,5 @@ export default async function Home() {
     .eq("id", user.id)
     .single();
 
-  redirect(usuario ? AREAS[usuario.area as Area].rota : "/login");
+  redirect(usuario ? AREAS[usuario.area as Area].rota : "/login?erro=usuario_sem_area");
 }

@@ -10,6 +10,8 @@ import { CampoSenha } from "@/components/CampoSenha";
 const MENSAGENS_ERRO_URL: Record<string, string> = {
   usuario_sem_area:
     "Login autenticado, mas este e-mail ainda não está vinculado a nenhuma área (tabela usuario). Peça para o administrador rodar o insert com o UUID correto.",
+  sem_sessao_servidor:
+    "O login funcionou no navegador, mas o servidor não reconheceu a sessão (problema de cookie/sessão). Tente novamente; se persistir, avise o desenvolvedor.",
 };
 
 function FormularioLogin() {

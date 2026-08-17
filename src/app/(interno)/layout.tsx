@@ -15,7 +15,7 @@ export default async function LayoutInterno({
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/login?erro=sem_sessao_servidor");
   }
 
   const { data: usuario } = await supabase
