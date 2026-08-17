@@ -8,9 +8,6 @@ alter table credenciamento
   add column taxa_frete numeric(5, 2),
   add column taxa_vpo numeric(5, 2),
   add column permanencia_minima_meses integer,
-  add column parte_relacionada boolean not null default false,
-  add column aprovado_conselho boolean,
-  add column segue_politica_concorrencial boolean not null default true,
   add column aprovado_diretoria boolean,
   add column motivo_reprovacao text;
 
