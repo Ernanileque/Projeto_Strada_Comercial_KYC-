@@ -4,30 +4,48 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 type ResultadoEnvio = { erro: string } | { sucesso: true };
 
-async function enviarDocumento(
-  admin: ReturnType<typeof createAdminClient>,
-  credenciamentoId: string,
-  tipo: string,
-  arquivo: File,
-) {
-  const caminho = `${credenciamentoId}/${tipo}-${Date.now()}-${arquivo.name}`;
-  const { error: erroUpload } = await admin.storage
-    .from("documentos")
-    .upload(caminho, arquivo);
+interface AssinanteEnviado {
+  nome: string;
+  cpf: string;
+  email: string;
+  cargo: string;
+}
 
-  if (erroUpload) {
-    throw new Error(`Falha ao enviar ${tipo}: ${erroUpload.message}`);
-  }
+interface SocioEnviado {
+  pessoa: "PF" | "PJ";
+  nome: string;
+  doc: string;
+  pct?: string;
+  pep?: string;
+}
 
-  const { error: erroInsert } = await admin.from("documento").insert({
-    credenciamento_id: credenciamentoId,
-    tipo,
-    arquivo_url: caminho,
-  });
+interface TestemunhaEnviada {
+  nome: string;
+  cpf?: string;
+  email: string;
+}
 
-  if (erroInsert) {
-    throw new Error(erroInsert.message);
-  }
+interface DadosFichaEnviados {
+  assinantes?: AssinanteEnviado[];
+  socios?: SocioEnviado[];
+  testemunha?: TestemunhaEnviada;
+  [chave: string]: unknown;
+}
+
+const MAPA_TIPO_DOCUMENTO: Record<string, string> = {
+  contrato: "contrato_social",
+  cartaoCnpj: "cartao_cnpj_qsa",
+  qsa: "cartao_cnpj_qsa",
+  sintegra: "outro",
+  cnh: "rg_cnh_representante",
+  procuracao: "outro",
+  proposta: "outro",
+  imagem: "outro",
+  outro: "outro",
+};
+
+function soDigitos(v?: string): string {
+  return String(v || "").replace(/\D/g, "");
 }
 
 export async function enviarFichaKyc(
@@ -57,77 +75,77 @@ export async function enviarFichaKyc(
   const credenciamentoId = credenciamento.id;
 
   try {
-    const contratoSocial = formData.get("contrato_social") as File | null;
-    const cartaoCnpj = formData.get("cartao_cnpj_qsa") as File | null;
-    const rgCnh = formData.get("rg_cnh_representante") as File | null;
-    const comprovanteBancario = formData.get("comprovante_bancario") as File | null;
-    const comprovanteEndereco = formData.get("comprovante_endereco") as File | null;
+    const dados: DadosFichaEnviados = JSON.parse(String(formData.get("dados_json") ?? "{}"));
 
-    if (!contratoSocial?.size || !cartaoCnpj?.size || !rgCnh?.size) {
-      return { erro: "Contrato social, cartão CNPJ/QSA e RG/CNH são obrigatórios." };
+    const arquivos = formData.getAll("arquivo") as File[];
+    const tipos = formData.getAll("arquivo_tipo").map(String);
+    const arquivosValidos = arquivos.filter((a) => a instanceof File && a.size > 0);
+
+    if (!arquivosValidos.length) {
+      return { erro: "Anexe ao menos o contrato social e o cartão CNPJ/QSA." };
     }
 
-    await enviarDocumento(admin, credenciamentoId, "contrato_social", contratoSocial);
-    await enviarDocumento(admin, credenciamentoId, "cartao_cnpj_qsa", cartaoCnpj);
-    await enviarDocumento(admin, credenciamentoId, "rg_cnh_representante", rgCnh);
+    for (let i = 0; i < arquivos.length; i++) {
+      const arquivo = arquivos[i];
+      if (!(arquivo instanceof File) || !arquivo.size) continue;
 
-    if (comprovanteBancario?.size) {
-      await enviarDocumento(admin, credenciamentoId, "comprovante_bancario", comprovanteBancario);
-    }
-    if (comprovanteEndereco?.size) {
-      await enviarDocumento(admin, credenciamentoId, "comprovante_endereco", comprovanteEndereco);
-    }
+      const tipoDetectado = tipos[i] || "outro";
+      const tipoDocumento = MAPA_TIPO_DOCUMENTO[tipoDetectado] ?? "outro";
+      const caminho = `${credenciamentoId}/${tipoDocumento}-${Date.now()}-${arquivo.name}`;
 
-    const nomes = formData.getAll("socio_nome").map(String);
-    const cpfs = formData.getAll("socio_cpf").map(String);
-    const participacoes = formData.getAll("socio_participacao").map(String);
-    const peps = formData.getAll("socio_pep").map(String);
-    const emails = formData.getAll("socio_email").map(String);
+      const { error: erroUpload } = await admin.storage.from("documentos").upload(caminho, arquivo);
+      if (erroUpload) {
+        throw new Error(`Falha ao enviar ${arquivo.name}: ${erroUpload.message}`);
+      }
 
-    const socios = nomes
-      .map((nome, i) => ({
+      const { error: erroInsert } = await admin.from("documento").insert({
         credenciamento_id: credenciamentoId,
-        nome,
-        cpf: cpfs[i] || null,
-        participacao: participacoes[i] ? Number(participacoes[i]) : null,
-        pep_flag: peps[i] === "on",
-        email: emails[i] || null,
-      }))
-      .filter((s) => s.nome.trim().length > 0);
+        tipo: tipoDocumento,
+        arquivo_url: caminho,
+      });
+      if (erroInsert) throw new Error(erroInsert.message);
+    }
+
+    const assinantes = dados.assinantes ?? [];
+    const socios = (dados.socios ?? []).filter((s) => s.nome?.trim());
 
     if (!socios.length) {
-      return { erro: "Informe ao menos um sócio/representante assinante." };
+      return { erro: "Informe ao menos um sócio ou beneficiário final." };
     }
 
-    const { error: erroSocios } = await admin.from("socio").insert(socios);
+    const sociosParaInserir = socios.map((s) => {
+      const assinanteCorrespondente = assinantes.find(
+        (a) => soDigitos(a.cpf) && soDigitos(a.cpf) === soDigitos(s.doc),
+      );
+      return {
+        credenciamento_id: credenciamentoId,
+        nome: s.nome,
+        cpf: s.doc || null,
+        participacao: s.pct ? Number(String(s.pct).replace(",", ".")) || null : null,
+        pep_flag: s.pep === "Sim",
+        email: assinanteCorrespondente?.email || null,
+      };
+    });
+
+    const { error: erroSocios } = await admin.from("socio").insert(sociosParaInserir);
     if (erroSocios) throw new Error(erroSocios.message);
 
-    const testemunhaNome = String(formData.get("testemunha_nome") ?? "").trim();
-    const testemunhaCpf = String(formData.get("testemunha_cpf") ?? "").trim();
-    const testemunhaEmail = String(formData.get("testemunha_email") ?? "").trim();
-
-    if (!testemunhaNome || !testemunhaEmail) {
+    const testemunha = dados.testemunha;
+    if (!testemunha?.nome || !testemunha?.email) {
       return { erro: "Informe nome e e-mail da testemunha." };
     }
 
     const { error: erroTestemunha } = await admin.from("testemunha").insert({
       credenciamento_id: credenciamentoId,
-      nome: testemunhaNome,
-      cpf: testemunhaCpf || null,
-      email: testemunhaEmail,
+      nome: testemunha.nome,
+      cpf: testemunha.cpf || null,
+      email: testemunha.email,
     });
     if (erroTestemunha) throw new Error(erroTestemunha.message);
 
-    const dadosJson = {
-      faturamento_mensal: formData.get("faturamento_mensal"),
-      renda_representante: formData.get("renda_representante"),
-      pep_representante: formData.get("pep_representante") === "on",
-      email_contato: formData.get("email_contato"),
-    };
-
     const { error: erroFicha } = await admin.from("ficha_kyc").insert({
       credenciamento_id: credenciamentoId,
-      dados_json: dadosJson,
+      dados_json: dados as never,
     });
     if (erroFicha) throw new Error(erroFicha.message);
 
