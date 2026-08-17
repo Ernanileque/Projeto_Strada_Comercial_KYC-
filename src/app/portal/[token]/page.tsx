@@ -24,15 +24,11 @@ export default async function PortalClientePage({
   const { token } = await params;
   const admin = createAdminClient();
 
-  const { data: credenciamento, error } = await admin
+  const { data: credenciamento } = await admin
     .from("credenciamento")
     .select("status, expira_em")
     .eq("token", token)
     .single();
-
-  if (error) {
-    console.error("[portal] erro ao buscar credenciamento pelo token", token, error);
-  }
 
   if (!credenciamento) {
     return (
