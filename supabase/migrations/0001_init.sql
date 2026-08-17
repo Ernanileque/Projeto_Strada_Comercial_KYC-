@@ -214,3 +214,16 @@ create policy "interno_le_tudo_implantacao" on implantacao
 
 create policy "interno_le_tudo_evento" on evento
   for select using (auth.uid() in (select id from usuario where ativo));
+
+-- ============================================================
+-- GRANTS
+-- RLS só filtra QUAIS linhas uma role vê; sem o GRANT de base, o
+-- Postgres nega o acesso à tabela inteira antes mesmo de avaliar as
+-- políticas. Sem isso, todo select feito pelo app (role authenticated)
+-- falha, mesmo com as políticas acima corretas.
+-- ============================================================
+
+grant select on
+  usuario, cliente, credenciamento, socio, documento,
+  ficha_kyc, validacao, contrato, implantacao, evento
+to authenticated;
