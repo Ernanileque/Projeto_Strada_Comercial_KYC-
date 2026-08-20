@@ -26,7 +26,7 @@ export default async function PortalClientePage({
 
   const { data: credenciamento } = await admin
     .from("credenciamento")
-    .select("status, expira_em")
+    .select("status, expira_em, cliente:cliente_id(cnpj)")
     .eq("token", token)
     .single();
 
@@ -61,5 +61,7 @@ export default async function PortalClientePage({
     );
   }
 
-  return <FormularioPortal token={token} />;
+  const cliente = credenciamento.cliente as unknown as { cnpj: string } | null;
+
+  return <FormularioPortal token={token} cnpjRegistrado={cliente?.cnpj ?? ""} />;
 }

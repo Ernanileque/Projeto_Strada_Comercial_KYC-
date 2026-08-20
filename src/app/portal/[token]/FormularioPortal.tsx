@@ -130,7 +130,13 @@ const ROTULO_TIPO: Record<string, string> = {
 
 type EstadoEnvio = { erro: string } | { sucesso: true } | null;
 
-export function FormularioPortal({ token }: { token: string }) {
+export function FormularioPortal({
+  token,
+  cnpjRegistrado,
+}: {
+  token: string;
+  cnpjRegistrado?: string;
+}) {
   const [processando, setProcessando] = useState(false);
   const [arquivos, setArquivos] = useState<Arquivo[]>([]);
   const [supabase] = useState(() => createClient());
@@ -200,8 +206,9 @@ export function FormularioPortal({ token }: { token: string }) {
           tipo: a.tipo as Parameters<typeof montarChecklist>[0][number],
           resultado: a.resultado,
         })),
+        cnpjRegistrado,
       }),
-    [empresa, capital, socios, assinantes, testemunha, arquivos],
+    [empresa, capital, socios, assinantes, testemunha, arquivos, cnpjRegistrado],
   );
 
   async function acao(_estadoAnterior: EstadoEnvio, formData: FormData) {

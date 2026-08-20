@@ -797,6 +797,8 @@ export interface ConferenciaEntrada {
   assinantes: AssinanteConferencia[];
   testemunha: { nome: string; cpf: string };
   arquivos: { tipo: TipoDocumentoDetectado; resultado?: ResultadoAnalise }[];
+  /** CNPJ do cliente registrado pelo Comercial na abertura do credenciamento. */
+  cnpjRegistrado?: string;
 }
 
 export interface ConferenciaResultado {
@@ -814,6 +816,16 @@ export function conferir(e: ConferenciaEntrada): ConferenciaResultado {
 
   if (e.empresa.cnpj && !validarCnpj(e.empresa.cnpj)) {
     erros.push("CNPJ da empresa é inválido (dígito verificador não confere).");
+  }
+
+  if (
+    e.cnpjRegistrado &&
+    e.empresa.cnpj &&
+    soDigitos(e.cnpjRegistrado) !== soDigitos(e.empresa.cnpj)
+  ) {
+    erros.push(
+      "O CNPJ preenchido nesta ficha é diferente do CNPJ registrado quando este link foi gerado. Confirme se este é o link correto para a sua empresa antes de continuar.",
+    );
   }
 
   e.socios.forEach((s) => {
