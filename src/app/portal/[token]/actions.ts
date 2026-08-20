@@ -25,11 +25,50 @@ interface TestemunhaEnviada {
   email: string;
 }
 
+interface ArquivoEnviado {
+  caminho: string;
+  tipoDetectado: string;
+}
+
 interface DadosFichaEnviados {
   assinantes?: AssinanteEnviado[];
   socios?: SocioEnviado[];
   testemunha?: TestemunhaEnviada;
+  arquivos?: ArquivoEnviado[];
   [chave: string]: unknown;
+}
+
+type ResultadoUpload = { caminho: string; signedToken: string } | { erro: string };
+
+/**
+ * Gera uma URL assinada de upload direto pro Storage (o navegador manda o
+ * arquivo direto pro Supabase, sem passar pelo corpo da Server Action —
+ * que tem limite de 1MB e estourava fácil com vários PDFs reais).
+ */
+export async function prepararUpload(
+  token: string,
+  nomeArquivo: string,
+): Promise<ResultadoUpload> {
+  const admin = createAdminClient();
+
+  const { data: credenciamento } = await admin
+    .from("credenciamento")
+    .select("id, status")
+    .eq("token", token)
+    .single();
+
+  if (!credenciamento || credenciamento.status !== "AGUARDANDO_CLIENTE") {
+    return { erro: "Link inválido ou já utilizado." };
+  }
+
+  const caminho = `${credenciamento.id}/${Date.now()}-${nomeArquivo}`;
+  const { data, error } = await admin.storage.from("documentos").createSignedUploadUrl(caminho);
+
+  if (error || !data) {
+    return { erro: error?.message ?? "Não foi possível preparar o upload." };
+  }
+
+  return { caminho: data.path, signedToken: data.token };
 }
 
 const MAPA_TIPO_DOCUMENTO: Record<string, string> = {
@@ -77,31 +116,20 @@ export async function enviarFichaKyc(
   try {
     const dados: DadosFichaEnviados = JSON.parse(String(formData.get("dados_json") ?? "{}"));
 
-    const arquivos = formData.getAll("arquivo") as File[];
-    const tipos = formData.getAll("arquivo_tipo").map(String);
-    const arquivosValidos = arquivos.filter((a) => a instanceof File && a.size > 0);
+    const arquivosEnviados = dados.arquivos ?? [];
 
-    if (!arquivosValidos.length) {
+    if (!arquivosEnviados.length) {
       return { erro: "Anexe ao menos o contrato social e o cartão CNPJ/QSA." };
     }
 
-    for (let i = 0; i < arquivos.length; i++) {
-      const arquivo = arquivos[i];
-      if (!(arquivo instanceof File) || !arquivo.size) continue;
+    for (const arquivo of arquivosEnviados) {
+      if (!arquivo.caminho || !arquivo.caminho.startsWith(`${credenciamentoId}/`)) continue;
 
-      const tipoDetectado = tipos[i] || "outro";
-      const tipoDocumento = MAPA_TIPO_DOCUMENTO[tipoDetectado] ?? "outro";
-      const caminho = `${credenciamentoId}/${tipoDocumento}-${Date.now()}-${arquivo.name}`;
-
-      const { error: erroUpload } = await admin.storage.from("documentos").upload(caminho, arquivo);
-      if (erroUpload) {
-        throw new Error(`Falha ao enviar ${arquivo.name}: ${erroUpload.message}`);
-      }
-
+      const tipoDocumento = MAPA_TIPO_DOCUMENTO[arquivo.tipoDetectado] ?? "outro";
       const { error: erroInsert } = await admin.from("documento").insert({
         credenciamento_id: credenciamentoId,
         tipo: tipoDocumento,
-        arquivo_url: caminho,
+        arquivo_url: arquivo.caminho,
       });
       if (erroInsert) throw new Error(erroInsert.message);
     }

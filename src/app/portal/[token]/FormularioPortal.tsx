@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
-import { enviarFichaKyc } from "./actions";
+import { useActionState, useMemo, useState } from "react";
+import { enviarFichaKyc, prepararUpload } from "./actions";
+import { createClient } from "@/lib/supabase/client";
 import { LogoStrada } from "@/components/LogoStrada";
 import {
   analisar,
@@ -86,6 +87,8 @@ type Arquivo = {
   aviso?: string;
   resultado?: ResultadoAnalise;
   viaOcr?: boolean;
+  caminho?: string;
+  enviando?: boolean;
 };
 
 const socioVazio = (): SocioForm => ({
@@ -122,7 +125,7 @@ type EstadoEnvio = { erro: string } | { sucesso: true } | null;
 export function FormularioPortal({ token }: { token: string }) {
   const [processando, setProcessando] = useState(false);
   const [arquivos, setArquivos] = useState<Arquivo[]>([]);
-  const arquivosRef = useRef<Map<string, File>>(new Map());
+  const [supabase] = useState(() => createClient());
 
   const [empresa, setEmpresa] = useState({
     cnpj: "",
@@ -162,6 +165,8 @@ export function FormularioPortal({ token }: { token: string }) {
   const [capital, setCapital] = useState({ valor: "", valorQuota: "", totalQuotas: "" });
   const [socios, setSocios] = useState<SocioForm[]>([socioVazio()]);
   const [declaracoes, setDeclaracoes] = useState({ pep: false, procuracoes: false, veracidade: false });
+
+  const arquivosSemUpload = arquivos.some((a) => !a.caminho);
 
   const checklist = useMemo(
     () => montarChecklist(arquivos.map((a) => a.tipo as Parameters<typeof montarChecklist>[0][number])),
@@ -205,14 +210,11 @@ export function FormularioPortal({ token }: { token: string }) {
         capital,
         socios,
         declaracoes,
+        arquivos: arquivos
+          .filter((a) => a.caminho)
+          .map((a) => ({ caminho: a.caminho, tipoDetectado: a.tipo })),
       }),
     );
-    arquivos.forEach((item) => {
-      const file = arquivosRef.current.get(item.nome);
-      if (!file) return;
-      formData.append("arquivo", file, item.nome);
-      formData.append("arquivo_tipo", item.tipo);
-    });
     return enviarFichaKyc(token, formData);
   }
 
@@ -222,7 +224,6 @@ export function FormularioPortal({ token }: { token: string }) {
     if (!lista) return;
     setProcessando(true);
     for (const file of Array.from(lista)) {
-      arquivosRef.current.set(file.name, file);
       setArquivos((prev) => [...prev, { nome: file.name, tipo: "outro" }]);
 
       const ehPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
@@ -268,8 +269,32 @@ export function FormularioPortal({ token }: { token: string }) {
         aviso = "Não foi possível ler este arquivo — preencha os campos manualmente.";
       }
 
+      // Envia o arquivo direto pro Storage via URL assinada — fora do
+      // corpo da Server Action, que tem limite de 1MB e estoura fácil
+      // com vários PDFs reais anexados juntos.
+      let caminho: string | undefined;
+      try {
+        const preparo = await prepararUpload(token, file.name);
+        if ("erro" in preparo) {
+          aviso = `Falha ao preparar o envio: ${preparo.erro}`;
+        } else {
+          const { error: erroUpload } = await supabase.storage
+            .from("documentos")
+            .uploadToSignedUrl(preparo.caminho, preparo.signedToken, file);
+          if (erroUpload) {
+            aviso = `Falha ao enviar o arquivo: ${erroUpload.message}`;
+          } else {
+            caminho = preparo.caminho;
+          }
+        }
+      } catch {
+        aviso = "Falha ao enviar o arquivo — tente anexar novamente.";
+      }
+
       setArquivos((prev) =>
-        prev.map((a) => (a.nome === file.name ? { nome: file.name, tipo, aviso, resultado, viaOcr } : a)),
+        prev.map((a) =>
+          a.nome === file.name ? { nome: file.name, tipo, aviso, resultado, viaOcr, caminho } : a,
+        ),
       );
     }
     setProcessando(false);
@@ -424,6 +449,13 @@ export function FormularioPortal({ token }: { token: string }) {
                     </span>
                   )}
                   {a.aviso && <span className="text-[11px] text-amber-700">{a.aviso}</span>}
+                  <button
+                    type="button"
+                    onClick={() => setArquivos((prev) => prev.filter((x) => x.nome !== a.nome))}
+                    className="shrink-0 text-[11px] text-strada-cinza hover:text-strada-vinho"
+                  >
+                    Remover
+                  </button>
                 </li>
               ))}
             </ul>
@@ -967,14 +999,16 @@ export function FormularioPortal({ token }: { token: string }) {
 
         <button
           type="submit"
-          disabled={enviando || processando || conferencia.erros.length > 0}
+          disabled={enviando || processando || arquivosSemUpload || conferencia.erros.length > 0}
           className="w-full rounded bg-strada-laranja py-3 text-sm font-medium text-white disabled:opacity-60"
         >
           {enviando
             ? "Enviando…"
-            : conferencia.erros.length > 0
-              ? "Corrija os erros da conferência automática para enviar"
-              : "Enviar ao Compliance"}
+            : arquivosSemUpload
+              ? "Aguarde o envio dos arquivos ou remova os que falharam"
+              : conferencia.erros.length > 0
+                ? "Corrija os erros da conferência automática para enviar"
+                : "Enviar ao Compliance"}
         </button>
       </form>
     </div>
