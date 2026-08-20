@@ -22,6 +22,14 @@ const classeInput =
 const classeInputAuto =
   "w-full rounded border-l-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none";
 
+/** Máscara de moeda: cada dígito digitado entra como centavo, ex. "123456" vira "1.234,56". */
+function formatarMoeda(valorDigitado: string): string {
+  const digitos = valorDigitado.replace(/\D/g, "");
+  if (!digitos) return "";
+  const numero = parseInt(digitos, 10) / 100;
+  return numero.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function Campo({
   label,
   children,
@@ -533,16 +541,18 @@ export function FormularioPortal({ token }: { token: string }) {
             <Campo label="Faturamento mensal (R$) *">
               <input
                 required
+                inputMode="numeric"
                 value={empresa.fatMes}
-                onChange={(e) => setEmpresa({ ...empresa, fatMes: e.target.value })}
+                onChange={(e) => setEmpresa({ ...empresa, fatMes: formatarMoeda(e.target.value) })}
                 className={classeInput}
               />
             </Campo>
             <Campo label="Faturamento anual (R$) *">
               <input
                 required
+                inputMode="numeric"
                 value={empresa.fatAno}
-                onChange={(e) => setEmpresa({ ...empresa, fatAno: e.target.value })}
+                onChange={(e) => setEmpresa({ ...empresa, fatAno: formatarMoeda(e.target.value) })}
                 className={classeInput}
               />
             </Campo>
@@ -706,6 +716,39 @@ export function FormularioPortal({ token }: { token: string }) {
           ).map(([chave, titulo]) => (
             <div key={chave} className="rounded border-l-2 border-strada-laranja bg-gray-50 p-3">
               <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-strada-vinho">{titulo}</h4>
+              {chave !== "operacional" && (
+                <label className="mb-2 flex items-center gap-2 text-xs text-strada-cinza">
+                  Preencher com os dados de um assinante:
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const assinante = assinantes[Number(e.target.value)];
+                      if (!assinante) return;
+                      setContatos((atual) => ({
+                        ...atual,
+                        [chave]: {
+                          ...atual[chave],
+                          nome: assinante.nome,
+                          email: assinante.email,
+                          cargo: assinante.cargo,
+                        },
+                      }));
+                      e.target.value = "";
+                    }}
+                    className="rounded border border-black/10 px-2 py-1 text-xs"
+                  >
+                    <option value="">selecionar…</option>
+                    {assinantes.map(
+                      (a, idx) =>
+                        a.nome && (
+                          <option key={idx} value={idx}>
+                            {a.nome}
+                          </option>
+                        ),
+                    )}
+                  </select>
+                </label>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Campo label="Nome *">
                   <input
