@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/StatusBadge";
 import { VerDocumentoBotao } from "../VerDocumentoBotao";
+import { ValidadorPainel } from "./ValidadorPainel";
 
 const ROTULO_TIPO_DOCUMENTO: Record<string, string> = {
   contrato_social: "Contrato social",
@@ -80,7 +81,7 @@ export default async function CredenciamentoCompliancePage({
 
   if (!credenciamento) notFound();
 
-  const [{ data: ficha }, { data: documentos }, { data: socios }, { data: testemunha }] =
+  const [{ data: ficha }, { data: documentos }, { data: socios }, { data: testemunha }, { data: validacoes }] =
     await Promise.all([
       supabase.from("ficha_kyc").select("dados_json").eq("credenciamento_id", id).maybeSingle(),
       supabase
@@ -93,6 +94,11 @@ export default async function CredenciamentoCompliancePage({
         .select("id, nome, cpf, participacao, pep_flag, email")
         .eq("credenciamento_id", id),
       supabase.from("testemunha").select("nome, cpf, email").eq("credenciamento_id", id).maybeSingle(),
+      supabase
+        .from("validacao")
+        .select("id, validador, resultado, alertas_json, validado_em")
+        .eq("credenciamento_id", id)
+        .order("validado_em", { ascending: false }),
     ]);
 
   const cliente = credenciamento.cliente as unknown as {
@@ -287,6 +293,12 @@ export default async function CredenciamentoCompliancePage({
           {!documentos?.length && <p className="py-2 text-sm text-strada-cinza">Nenhum documento anexado.</p>}
         </ul>
       </Bloco>
+
+      <ValidadorPainel
+        credenciamentoId={credenciamento.id}
+        status={credenciamento.status}
+        validacoesIniciais={validacoes ?? []}
+      />
 
       <Bloco titulo="Contato comercial (registrado na abertura)">
         <dl className="grid grid-cols-3 gap-3">

@@ -14,7 +14,7 @@ export interface DocumentoParaAnalise {
   nomeArquivo: string;
   categoriaDocumento: string;
   base64: string;
-  mediaType: "application/pdf" | "image/jpeg" | "image/png";
+  mediaType: "application/pdf" | "image/jpeg" | "image/png" | "image/webp";
 }
 
 export interface InconsistenciaCadastral {
