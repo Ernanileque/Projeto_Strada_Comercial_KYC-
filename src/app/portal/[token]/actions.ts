@@ -189,7 +189,7 @@ export async function enviarFichaKyc(
 
     const { error: erroStatus } = await admin
       .from("credenciamento")
-      .update({ status: "EM_ANALISE" })
+      .update({ status: "EM_ANALISE", entrou_em_analise_em: new Date().toISOString() })
       .eq("id", credenciamentoId);
     if (erroStatus) throw new Error(erroStatus.message);
 

@@ -7,9 +7,9 @@ export default async function CompliancePage() {
 
   const { data: credenciamentos } = await supabase
     .from("credenciamento")
-    .select("id, status, criado_em, cliente:cliente_id(razao_social, cnpj)")
+    .select("id, status, criado_em, entrou_em_analise_em, cliente:cliente_id(razao_social, cnpj)")
     .eq("status", "EM_ANALISE")
-    .order("criado_em", { ascending: true });
+    .order("entrou_em_analise_em", { ascending: true });
 
   return (
     <div>
@@ -32,14 +32,15 @@ export default async function CompliancePage() {
           <tbody>
             {credenciamentos?.map((c) => {
               const cliente = c.cliente as unknown as { razao_social: string; cnpj: string };
-              const horas = horasEmAberto(c.criado_em);
-              const estourou = estourouSla(c.criado_em);
+              const desde = c.entrou_em_analise_em ?? c.criado_em;
+              const horas = horasEmAberto(desde);
+              const estourou = estourouSla(desde);
               return (
                 <tr key={c.id} className="border-b border-black/5 last:border-0">
                   <td className="px-4 py-2">{cliente?.razao_social}</td>
                   <td className="px-4 py-2">{cliente?.cnpj}</td>
                   <td className="px-4 py-2 text-strada-cinza">
-                    {new Date(c.criado_em).toLocaleDateString("pt-BR")}
+                    {new Date(desde).toLocaleDateString("pt-BR")}
                   </td>
                   <td className="px-4 py-2">
                     <span className={estourou ? "font-semibold text-red-700" : "text-strada-cinza"}>
