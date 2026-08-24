@@ -118,10 +118,29 @@ export async function enviarFichaKyc(
     if (eraDevolucao) {
       // Reenvio depois de devolvido: substitui a submissão anterior por
       // completo, em vez de acumular documentos/sócios duplicados.
-      await admin.from("documento").delete().eq("credenciamento_id", credenciamentoId);
-      await admin.from("socio").delete().eq("credenciamento_id", credenciamentoId);
-      await admin.from("testemunha").delete().eq("credenciamento_id", credenciamentoId);
-      await admin.from("ficha_kyc").delete().eq("credenciamento_id", credenciamentoId);
+      const { error: erroLimpaDocumento } = await admin
+        .from("documento")
+        .delete()
+        .eq("credenciamento_id", credenciamentoId);
+      if (erroLimpaDocumento) throw new Error(`Falha ao limpar documentos antigos: ${erroLimpaDocumento.message}`);
+
+      const { error: erroLimpaSocio } = await admin
+        .from("socio")
+        .delete()
+        .eq("credenciamento_id", credenciamentoId);
+      if (erroLimpaSocio) throw new Error(`Falha ao limpar sócios antigos: ${erroLimpaSocio.message}`);
+
+      const { error: erroLimpaTestemunha } = await admin
+        .from("testemunha")
+        .delete()
+        .eq("credenciamento_id", credenciamentoId);
+      if (erroLimpaTestemunha) throw new Error(`Falha ao limpar testemunha antiga: ${erroLimpaTestemunha.message}`);
+
+      const { error: erroLimpaFicha } = await admin
+        .from("ficha_kyc")
+        .delete()
+        .eq("credenciamento_id", credenciamentoId);
+      if (erroLimpaFicha) throw new Error(`Falha ao limpar ficha antiga: ${erroLimpaFicha.message}`);
     }
 
     const dados: DadosFichaEnviados = JSON.parse(String(formData.get("dados_json") ?? "{}"));
