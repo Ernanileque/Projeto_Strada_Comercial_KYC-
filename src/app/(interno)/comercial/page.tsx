@@ -53,7 +53,7 @@ export default async function ComercialPage() {
                   {new Date(c.criado_em).toLocaleDateString("pt-BR")}
                 </td>
                 <td className="px-4 py-2">
-                  {c.status === "AGUARDANDO_CLIENTE" && (
+                  {(c.status === "AGUARDANDO_CLIENTE" || c.status === "DEVOLVIDO") && (
                     <CopiarLink texto={`${origem}/portal/${c.token}`} />
                   )}
                 </td>
