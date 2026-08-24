@@ -5,6 +5,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { rodarValidadorCadastral, type DocumentoParaAnalise, type ResultadoValidador } from "@/lib/compliance/validador";
 
+// A Vercel encerra funções de servidor em 10s por padrão. A análise de IA
+// (várias chamadas à Claude com documentos em paralelo) costuma passar
+// disso — sem isso, a chamada parecia travada pro usuário mesmo quando o
+// resultado já tinha sido salvo no banco.
+export const maxDuration = 60;
+
 const CATEGORIA_POR_TIPO: Record<string, string> = {
   contrato_social: "Contrato social",
   cartao_cnpj_qsa: "Cartão CNPJ/QSA",
