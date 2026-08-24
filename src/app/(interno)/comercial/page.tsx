@@ -41,7 +41,9 @@ export default async function ComercialPage() {
             {credenciamentos?.map((c) => (
               <tr key={c.id} className="border-b border-black/5 last:border-0">
                 <td className="px-4 py-2">
-                  {(c.cliente as unknown as { razao_social: string })?.razao_social}
+                  <Link href={`/comercial/${c.id}`} className="text-strada-vinho hover:underline">
+                    {(c.cliente as unknown as { razao_social: string })?.razao_social}
+                  </Link>
                 </td>
                 <td className="px-4 py-2">
                   {(c.cliente as unknown as { cnpj: string })?.cnpj}

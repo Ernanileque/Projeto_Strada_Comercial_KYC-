@@ -5,6 +5,7 @@ import {
   analisarCredenciamento,
   aprovarCredenciamento,
   devolverAoCliente,
+  negarCredenciamento,
 } from "./actions";
 import type { ResultadoValidador } from "@/lib/compliance/validador";
 
@@ -182,6 +183,8 @@ export function ValidadorPainel({
 
   const [mostrarDevolver, setMostrarDevolver] = useState(false);
   const [motivo, setMotivo] = useState("");
+  const [mostrarNegar, setMostrarNegar] = useState(false);
+  const [motivoNegativa, setMotivoNegativa] = useState("");
   const [enviandoDecisao, setEnviandoDecisao] = useState(false);
   const [decisaoTomada, setDecisaoTomada] = useState(false);
 
@@ -211,6 +214,17 @@ export function ValidadorPainel({
   async function confirmarDevolucao() {
     setEnviandoDecisao(true);
     const resposta = await devolverAoCliente(credenciamentoId, motivo);
+    setEnviandoDecisao(false);
+    if (resposta.erro) {
+      setErro(resposta.erro);
+      return;
+    }
+    setDecisaoTomada(true);
+  }
+
+  async function confirmarNegativa() {
+    setEnviandoDecisao(true);
+    const resposta = await negarCredenciamento(credenciamentoId, motivoNegativa);
     setEnviandoDecisao(false);
     if (resposta.erro) {
       setErro(resposta.erro);
@@ -272,6 +286,14 @@ export function ValidadorPainel({
             >
               Devolver ao cliente
             </button>
+            <button
+              type="button"
+              onClick={() => setMostrarNegar(true)}
+              disabled={enviandoDecisao}
+              className="rounded border border-red-700 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60"
+            >
+              Negar (devolver ao Comercial)
+            </button>
           </div>
           {mostrarDevolver && (
             <div className="space-y-2 border-t border-black/5 pt-3">
@@ -289,6 +311,25 @@ export function ValidadorPainel({
                 className="rounded bg-strada-vinho px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
               >
                 Confirmar devolução
+              </button>
+            </div>
+          )}
+          {mostrarNegar && (
+            <div className="space-y-2 border-t border-black/5 pt-3">
+              <textarea
+                value={motivoNegativa}
+                onChange={(e) => setMotivoNegativa(e.target.value)}
+                rows={2}
+                placeholder="Motivo da negativa (o Comercial vai ver isso, o cliente não)"
+                className="w-full rounded border border-black/10 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={confirmarNegativa}
+                disabled={enviandoDecisao}
+                className="rounded bg-red-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                Confirmar negativa
               </button>
             </div>
           )}
