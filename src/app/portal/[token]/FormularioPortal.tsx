@@ -133,9 +133,11 @@ type EstadoEnvio = { erro: string } | { sucesso: true } | null;
 export function FormularioPortal({
   token,
   cnpjRegistrado,
+  motivoDevolucao,
 }: {
   token: string;
   cnpjRegistrado?: string;
+  motivoDevolucao?: string;
 }) {
   const [processando, setProcessando] = useState(false);
   const [arquivos, setArquivos] = useState<Arquivo[]>([]);
@@ -428,6 +430,15 @@ export function FormularioPortal({
       </div>
 
       <form action={formAction} className="mx-auto max-w-3xl space-y-4 p-6">
+        {motivoDevolucao && (
+          <div className="rounded border border-amber-300 bg-amber-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-amber-800">
+              Sua ficha foi devolvida — revise antes de reenviar
+            </p>
+            <p className="mt-1 text-sm text-amber-900">{motivoDevolucao}</p>
+          </div>
+        )}
+
         <Secao numero="00" titulo="Documentos">
           <p className="text-xs text-strada-cinza">
             Contrato social ou última alteração, cartão CNPJ, quadro de sócios

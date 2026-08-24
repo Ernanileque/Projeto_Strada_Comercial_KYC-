@@ -26,7 +26,7 @@ export default async function PortalClientePage({
 
   const { data: credenciamento } = await admin
     .from("credenciamento")
-    .select("status, expira_em, cliente:cliente_id(cnpj)")
+    .select("id, status, expira_em, cliente:cliente_id(cnpj)")
     .eq("token", token)
     .single();
 
@@ -39,11 +39,10 @@ export default async function PortalClientePage({
     );
   }
 
-  if (
-    credenciamento.expira_em &&
-    new Date(credenciamento.expira_em) < new Date() &&
-    credenciamento.status === "AGUARDANDO_CLIENTE"
-  ) {
+  const aindaAbertoParaEdicao =
+    credenciamento.status === "AGUARDANDO_CLIENTE" || credenciamento.status === "DEVOLVIDO";
+
+  if (credenciamento.expira_em && new Date(credenciamento.expira_em) < new Date() && aindaAbertoParaEdicao) {
     return (
       <TelaMensagem
         titulo="Link expirado"
@@ -52,7 +51,7 @@ export default async function PortalClientePage({
     );
   }
 
-  if (credenciamento.status !== "AGUARDANDO_CLIENTE") {
+  if (!aindaAbertoParaEdicao) {
     return (
       <TelaMensagem
         titulo="Enviado, aguarde"
@@ -63,5 +62,20 @@ export default async function PortalClientePage({
 
   const cliente = credenciamento.cliente as unknown as { cnpj: string } | null;
 
-  return <FormularioPortal token={token} cnpjRegistrado={cliente?.cnpj ?? ""} />;
+  let motivoDevolucao: string | undefined;
+  if (credenciamento.status === "DEVOLVIDO") {
+    const { data: ultimaValidacao } = await admin
+      .from("validacao")
+      .select("alertas_json")
+      .eq("credenciamento_id", credenciamento.id)
+      .order("validado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const alertas = ultimaValidacao?.alertas_json as { motivo?: string } | null;
+    motivoDevolucao = alertas?.motivo;
+  }
+
+  return (
+    <FormularioPortal token={token} cnpjRegistrado={cliente?.cnpj ?? ""} motivoDevolucao={motivoDevolucao} />
+  );
 }

@@ -57,7 +57,7 @@ export async function prepararUpload(
     .eq("token", token)
     .single();
 
-  if (!credenciamento || credenciamento.status !== "AGUARDANDO_CLIENTE") {
+  if (!credenciamento || !["AGUARDANDO_CLIENTE", "DEVOLVIDO"].includes(credenciamento.status)) {
     return { erro: "Link inválido ou já utilizado." };
   }
 
@@ -103,7 +103,7 @@ export async function enviarFichaKyc(
     return { erro: "Link inválido." };
   }
 
-  if (credenciamento.status !== "AGUARDANDO_CLIENTE") {
+  if (!["AGUARDANDO_CLIENTE", "DEVOLVIDO"].includes(credenciamento.status)) {
     return { erro: "Este link já foi utilizado ou não está mais disponível." };
   }
 
@@ -112,8 +112,18 @@ export async function enviarFichaKyc(
   }
 
   const credenciamentoId = credenciamento.id;
+  const eraDevolucao = credenciamento.status === "DEVOLVIDO";
 
   try {
+    if (eraDevolucao) {
+      // Reenvio depois de devolvido: substitui a submissão anterior por
+      // completo, em vez de acumular documentos/sócios duplicados.
+      await admin.from("documento").delete().eq("credenciamento_id", credenciamentoId);
+      await admin.from("socio").delete().eq("credenciamento_id", credenciamentoId);
+      await admin.from("testemunha").delete().eq("credenciamento_id", credenciamentoId);
+      await admin.from("ficha_kyc").delete().eq("credenciamento_id", credenciamentoId);
+    }
+
     const dados: DadosFichaEnviados = JSON.parse(String(formData.get("dados_json") ?? "{}"));
 
     const arquivosEnviados = dados.arquivos ?? [];
