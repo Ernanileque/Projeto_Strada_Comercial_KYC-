@@ -114,6 +114,13 @@ export default function NovoCredenciamentoPage() {
               <input name="contato_fone" className={classeInput} />
             </Campo>
           </div>
+          <Campo label="Produto *">
+            <select name="produto" required defaultValue="STRADA_PAY" className={classeInput}>
+              <option value="STRADA_PAY">Strada Pay</option>
+              <option value="STRADA_LOG">Strada Log</option>
+              <option value="AMBOS">Strada Pay + Strada Log</option>
+            </select>
+          </Campo>
         </section>
 
         <button

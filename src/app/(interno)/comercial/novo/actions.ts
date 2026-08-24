@@ -18,6 +18,7 @@ export async function criarCredenciamento(formData: FormData) {
   const contatoNome = String(formData.get("contato_nome") ?? "").trim();
   const contatoEmail = String(formData.get("contato_email") ?? "").trim();
   const contatoFone = String(formData.get("contato_fone") ?? "").trim();
+  const produto = String(formData.get("produto") ?? "STRADA_PAY");
 
   const { data: cliente, error: erroCliente } = await supabase
     .from("cliente")
@@ -43,6 +44,7 @@ export async function criarCredenciamento(formData: FormData) {
     status: "AGUARDANDO_CLIENTE",
     criado_por: user.id,
     expira_em: expiraEm.toISOString(),
+    produto,
   });
 
   if (erroCredenciamento) {

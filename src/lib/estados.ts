@@ -15,6 +15,14 @@ export type StatusCredenciamento =
 
 export const SLA_HORAS = 24;
 
+export type ProdutoCredenciamento = "STRADA_PAY" | "STRADA_LOG" | "AMBOS";
+
+export const PRODUTO_LABEL: Record<ProdutoCredenciamento, string> = {
+  STRADA_PAY: "Strada Pay",
+  STRADA_LOG: "Strada Log",
+  AMBOS: "Strada Pay + Strada Log",
+};
+
 /** Estação (área) responsável por agir em cada status. `null` = ninguém age (estado terminal ou aguardando o cliente). */
 export const AREA_RESPONSAVEL: Record<StatusCredenciamento, Area | null> = {
   PROPOSTA_ACEITA: "comercial",
