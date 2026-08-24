@@ -4,6 +4,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { VerDocumentoBotao } from "../VerDocumentoBotao";
 import { ValidadorPainel } from "./ValidadorPainel";
 
+// As Server Actions desta página (analisarCredenciamento) herdam o
+// maxDuration da rota que as invoca, não só do arquivo de actions —
+// por isso precisa estar declarado aqui também.
+export const maxDuration = 60;
+
 const ROTULO_TIPO_DOCUMENTO: Record<string, string> = {
   contrato_social: "Contrato social",
   cartao_cnpj_qsa: "Cartão CNPJ / QSA",

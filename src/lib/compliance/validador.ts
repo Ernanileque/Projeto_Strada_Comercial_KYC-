@@ -295,7 +295,7 @@ function extrairJson<T>(blocos: Anthropic.Messages.ContentBlock[]): T {
   throw new Error(`A análise não retornou um JSON válido. Início da resposta: "${amostra}"`);
 }
 
-async function chamarAnalise<T>(
+async function chamarAnaliseUmaVez<T>(
   client: Anthropic,
   documentos: DocumentoParaAnalise[],
   fichaResumo: string,
@@ -321,6 +321,26 @@ async function chamarAnalise<T>(
     ],
   });
   return extrairJson<T>(resposta.content);
+}
+
+/**
+ * Volta e meia a API retorna uma resposta cortada bem no início (falha
+ * pontual, não reprodutível com o mesmo prompt/documentos) — tenta de
+ * novo uma vez antes de desistir, pra não obrigar o Compliance a clicar
+ * em "Analisar com IA" manualmente de novo.
+ */
+async function chamarAnalise<T>(
+  client: Anthropic,
+  documentos: DocumentoParaAnalise[],
+  fichaResumo: string,
+  prompt: string,
+  ferramentas?: Anthropic.Messages.ToolUnion[],
+): Promise<T> {
+  try {
+    return await chamarAnaliseUmaVez<T>(client, documentos, fichaResumo, prompt, ferramentas);
+  } catch {
+    return await chamarAnaliseUmaVez<T>(client, documentos, fichaResumo, prompt, ferramentas);
+  }
 }
 
 function contarGravidade(
