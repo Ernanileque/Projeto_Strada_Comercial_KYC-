@@ -259,22 +259,40 @@ function blocosDocumentos(documentos: DocumentoParaAnalise[]): Anthropic.Message
   );
 }
 
+function tentarParsear<T>(texto: string): T | null {
+  const limpo = texto
+    .trim()
+    .replace(/^```(json)?/i, "")
+    .replace(/```$/, "")
+    .trim();
+  try {
+    return JSON.parse(limpo) as T;
+  } catch {
+    // fallback: às vezes o modelo escreve um preâmbulo antes do JSON —
+    // tenta isolar o trecho entre a primeira "{" e a última "}".
+    const inicio = limpo.indexOf("{");
+    const fim = limpo.lastIndexOf("}");
+    if (inicio >= 0 && fim > inicio) {
+      try {
+        return JSON.parse(limpo.slice(inicio, fim + 1)) as T;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
 /** Extrai o JSON de resposta — tenta o último bloco de texto que der parse. */
 function extrairJson<T>(blocos: Anthropic.Messages.ContentBlock[]): T {
   const textos = blocos.filter((b): b is Anthropic.Messages.TextBlock => b.type === "text");
   for (let i = textos.length - 1; i >= 0; i--) {
-    const limpo = textos[i].text
-      .trim()
-      .replace(/^```(json)?/i, "")
-      .replace(/```$/, "")
-      .trim();
-    try {
-      return JSON.parse(limpo) as T;
-    } catch {
-      continue;
-    }
+    const resultado = tentarParsear<T>(textos[i].text);
+    if (resultado) return resultado;
   }
-  throw new Error("A análise não retornou um JSON válido.");
+  const ultimoTexto = textos[textos.length - 1]?.text ?? "";
+  const amostra = ultimoTexto.slice(0, 300).replace(/\s+/g, " ");
+  throw new Error(`A análise não retornou um JSON válido. Início da resposta: "${amostra}"`);
 }
 
 async function chamarAnalise<T>(
@@ -286,7 +304,7 @@ async function chamarAnalise<T>(
 ): Promise<T> {
   const resposta = await client.messages.create({
     model: MODELO,
-    max_tokens: 4096,
+    max_tokens: 8192,
     tools: ferramentas,
     messages: [
       {
