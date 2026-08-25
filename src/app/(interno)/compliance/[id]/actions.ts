@@ -170,7 +170,7 @@ export async function aprovarCredenciamento(credenciamentoId: string): Promise<{
       credenciamento_id: credenciamentoId,
       validador: "compliance_aprovacao",
       resultado: "APTO",
-      alertas_json: null,
+      alertas_json: {},
       validado_por: userId,
     });
     if (erroValidacao) return { erro: erroValidacao.message };
