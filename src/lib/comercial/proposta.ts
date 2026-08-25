@@ -19,6 +19,7 @@ export interface CondicoesLog {
 }
 
 export interface DadosProposta {
+  razaoSocial: string;
   validade?: string;
   vtf?: string;
   localData: string;
@@ -65,6 +66,7 @@ export async function gerarPropostaDocx(dados: DadosProposta): Promise<Buffer> {
   const log = dados.log ?? {};
 
   const substituicoes: Record<string, string> = {
+    "{{RAZAO_SOCIAL}}": dados.razaoSocial,
     "{{VALIDADE}}": dados.validade || "—",
     "{{VTF}}": dados.vtf || "—",
     "{{LOCAL_DATA}}": dados.localData,

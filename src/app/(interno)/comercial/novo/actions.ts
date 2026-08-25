@@ -5,6 +5,7 @@ import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { gerarPropostaDocx, type DadosProposta } from "@/lib/comercial/proposta";
+import { converterDocxParaPdf } from "@/lib/comercial/pdf";
 import { enviarPropostaPorEmail } from "@/lib/email/resend";
 
 function campo(formData: FormData, nome: string): string {
@@ -99,6 +100,7 @@ export async function criarCredenciamento(formData: FormData) {
       validade.setDate(validade.getDate() + 30);
 
       const dadosProposta: DadosProposta = {
+        razaoSocial,
         validade: validade.toLocaleDateString("pt-BR"),
         vtf: vtf || undefined,
         localData: `São Paulo, ${new Date().toLocaleDateString("pt-BR")}.`,
@@ -120,13 +122,18 @@ export async function criarCredenciamento(formData: FormData) {
       const origem = `https://${headersList.get("host")}`;
       const portalUrl = `${origem}/portal/${credenciamento.token}`;
 
+      const propostaPdfBuffer = await converterDocxParaPdf(
+        propostaBuffer,
+        `proposta-comercial-${credenciamento.id}.docx`,
+      );
+
       await enviarPropostaPorEmail({
         destinatarioEmail: contatoEmail,
         destinatarioNome: contatoNome,
         razaoSocial,
         portalUrl,
-        anexoBuffer: propostaBuffer,
-        anexoNomeArquivo: `Proposta Comercial Strada - ${razaoSocial}.docx`,
+        anexoBuffer: propostaPdfBuffer,
+        anexoNomeArquivo: `Proposta Comercial Strada - ${razaoSocial}.pdf`,
       });
 
       await supabase.from("proposta").insert({
