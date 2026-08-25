@@ -93,6 +93,7 @@ export default async function HistoricoCompliancePage() {
                   {new Date(l.ultimaAnalise).toLocaleDateString("pt-BR")}
                   {l.ultimoValidador === "compliance_negacao" && " (negado)"}
                   {l.ultimoValidador === "compliance_manual" && " (devolvido ao cliente)"}
+                  {l.ultimoValidador === "compliance_aprovacao" && " (aprovado manualmente)"}
                   {l.ultimoValidador === "ia_validador_cadastral" && " (IA)"}
                 </td>
                 <td className="px-4 py-2">

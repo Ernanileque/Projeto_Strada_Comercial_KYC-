@@ -161,7 +161,20 @@ export async function analisarCredenciamento(
 
 export async function aprovarCredenciamento(credenciamentoId: string): Promise<{ erro?: string }> {
   try {
-    const { supabase } = await exigirUsuarioCompliance();
+    const { supabase, userId } = await exigirUsuarioCompliance();
+
+    // Registra a decisão do Compliance (mesmo padrão de Devolver/Negar) —
+    // sem isso, o histórico mostrava só o resultado bruto da última análise
+    // de IA, mesmo quando o analista aprovou manualmente por cima dela.
+    const { error: erroValidacao } = await supabase.from("validacao").insert({
+      credenciamento_id: credenciamentoId,
+      validador: "compliance_aprovacao",
+      resultado: "APTO",
+      alertas_json: null,
+      validado_por: userId,
+    });
+    if (erroValidacao) return { erro: erroValidacao.message };
+
     const { error } = await supabase
       .from("credenciamento")
       .update({ status: "VALIDADO" })
