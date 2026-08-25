@@ -538,13 +538,17 @@ export function extrairCartaoCnpj(t: string): DadosEmpresaExtraidos {
   let g = pega(/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/);
   if (g) d.cnpj = g[0];
 
-  g = pega(/NOME EMPRESARIAL\s*(.+?)(?=\s*T(?:Í|I)TULO DO ESTABELECIMENTO|\s*\bPORTE\b|\s*C(?:Ó|O)DIGO E DESCRI)/i);
+  // O OCR confunde o "C" de "CÓDIGO" com "T" ("TÓDIGO") de forma
+  // consistente no cartão CNPJ atual do modelo do RFB — confirmado
+  // rodando o mesmo OCR num cartão real. Os limites abaixo aceitam
+  // ambos pra não deixar a captura "vazar" pro campo seguinte.
+  g = pega(/NOME EMPRESARIAL\s*(.+?)(?=\s*T(?:Í|I)TULO DO ESTABELECIMENTO|\s*\bPORTE\b|\s*[CT](?:Ó|O)DIGO E DESCRI)/i);
   if (g) d.razao = g[0];
 
   g = pega(
-    /\(NOME DE FANTASIA\)\s*\bPORTE\b\s*(.+?)\s+(DEMAIS|EPP|ME|MEI|MICROEMPRESA|EMPRESA DE PEQUENO PORTE)\s*(?=C(?:Ó|O)DIGO)/i,
+    /\(NOME DE FANTASIA\)\s*\bPORTE\b\s*(.+?)\s+(DEMAIS|EPP|ME|MEI|MICROEMPRESA|EMPRESA DE PEQUENO PORTE)\s*(?=[CT](?:Ó|O)DIGO)/i,
     /\(NOME DE FANTASIA\)\s*(.+?)\s*\bPORTE\b\s*(DEMAIS|EPP|ME|MEI|MICROEMPRESA|EMPRESA DE PEQUENO PORTE)/i,
-    /\(NOME DE FANTASIA\)\s*(.+?)(?=\s*\bPORTE\b|\s*C(?:Ó|O)DIGO)/i,
+    /\(NOME DE FANTASIA\)\s*(.+?)(?=\s*\bPORTE\b|\s*[CT](?:Ó|O)DIGO)/i,
   );
   if (g) {
     d.fantasia = g[0];
@@ -557,9 +561,9 @@ export function extrairCartaoCnpj(t: string): DadosEmpresaExtraidos {
 
   g = pega(/ATIVIDADE ECON(?:Ô|O)MICA PRINCIPAL\s*([\d.\-]{9,12})/i);
   if (g) d.cnae = g[0];
-  g = pega(/ATIVIDADE ECON(?:Ô|O)MICA PRINCIPAL\s*[\d.\-]{9,12}\s*-\s*(.+?)(?=\s*C(?:Ó|O)DIGO E DESCRI)/i);
+  g = pega(/ATIVIDADE ECON(?:Ô|O)MICA PRINCIPAL\s*[\d.\-]{9,12}\s*-\s*(.+?)(?=\s*[CT](?:Ó|O)DIGO E DESCRI)/i);
   if (g) d.cnaeDescricao = g[0];
-  g = pega(/NATUREZA JUR(?:Í|I)DICA\s*(\d{3}-\d\s*-\s*[^,]{5,60}?)(?=\s*LOGRADOURO|\s*C(?:Ó|O)DIGO)/i);
+  g = pega(/NATUREZA JUR(?:Í|I)DICA\s*(\d{3}-\d\s*-\s*[^,]{5,60}?)(?=\s*LOGRADOURO|\s*[CT](?:Ó|O)DIGO)/i);
   if (g) d.natureza = g[0];
 
   g = pega(/SITUA(?:Ç|C)(?:Ã|A)O CADASTRAL\s*(?:DATA DA SITUA(?:Ç|C)(?:Ã|A)O CADASTRAL\s*)?(ATIVA|BAIXADA|SUSPENSA|INAPTA|NULA)\b/i);
