@@ -957,6 +957,22 @@ async function obterWorkerOcr(): Promise<TesseractWorker> {
   return workerOcrPromise;
 }
 
+/**
+ * Documentos digitalizados por apps de "foto para PDF" às vezes embutem
+ * a página em tamanho muito maior que A4 (ex.: 5100x7014pt). Um canvas
+ * nesse tamanho em scale=2 pode passar do limite do navegador e lançar
+ * exceção — o que quebraria o worker do Tesseract (compartilhado entre
+ * todos os arquivos da mesma sessão) e derrubaria o OCR dos arquivos
+ * seguintes também. Por isso limitamos a maior dimensão do canvas.
+ */
+const MAX_DIMENSAO_CANVAS_OCR = 3000;
+
+function escalaSegura(pagina: { getViewport: (o: { scale: number }) => { width: number; height: number } }): number {
+  const base = pagina.getViewport({ scale: 1 });
+  const maiorLado = Math.max(base.width, base.height);
+  return Math.min(2, MAX_DIMENSAO_CANVAS_OCR / maiorLado);
+}
+
 const MAX_PAGINAS_OCR = 6;
 
 export async function textoPdfViaOcr(file: File): Promise<string> {
@@ -966,7 +982,6 @@ export async function textoPdfViaOcr(file: File): Promise<string> {
     import.meta.url,
   ).toString();
 
-  const worker = await obterWorkerOcr();
   const buf = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
   const paginas = Math.min(pdf.numPages, MAX_PAGINAS_OCR);
@@ -974,21 +989,41 @@ export async function textoPdfViaOcr(file: File): Promise<string> {
   let texto = "";
   for (let p = 1; p <= paginas; p++) {
     const pagina = await pdf.getPage(p);
-    const viewport = pagina.getViewport({ scale: 2 });
+    const viewport = pagina.getViewport({ scale: escalaSegura(pagina) });
     const canvas = document.createElement("canvas");
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     const contexto = canvas.getContext("2d");
     if (!contexto) continue;
     await pagina.render({ canvasContext: contexto, viewport, canvas }).promise;
-    const resultado = await worker.recognize(canvas);
-    texto += ` ${resultado.data.text}`;
+    texto += ` ${await reconhecer(canvas)}`;
   }
   return texto;
 }
 
 export async function textoImagemViaOcr(file: File): Promise<string> {
-  const worker = await obterWorkerOcr();
-  const resultado = await worker.recognize(file);
-  return resultado.data.text;
+  return reconhecer(file);
+}
+
+/**
+ * Roda o OCR e, se o worker compartilhado falhar (ex.: por um arquivo
+ * anterior ter estourado o canvas), descarta o worker quebrado e refaz a
+ * tentativa com um worker novo — em vez de deixar todos os arquivos
+ * seguintes da mesma sessão falharem em cascata.
+ */
+async function reconhecer(entrada: HTMLCanvasElement | File): Promise<string> {
+  try {
+    const worker = await obterWorkerOcr();
+    const resultado = await worker.recognize(entrada);
+    return resultado.data.text;
+  } catch (erro) {
+    workerOcrPromise = null;
+    try {
+      const worker = await obterWorkerOcr();
+      const resultado = await worker.recognize(entrada);
+      return resultado.data.text;
+    } catch {
+      throw erro;
+    }
+  }
 }
