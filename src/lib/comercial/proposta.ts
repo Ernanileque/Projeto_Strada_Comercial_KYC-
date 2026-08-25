@@ -4,7 +4,6 @@ import path from "path";
 
 export interface CondicoesPay {
   taxaFrete?: string;
-  taxaVpo?: string;
   semParar?: string;
   moveMais?: string;
   taggyStrada?: string;
@@ -56,6 +55,12 @@ export async function gerarPropostaDocx(dados: DadosProposta): Promise<Buffer> {
 
   let xml = await arquivoDocumento.async("string");
 
+  // Taxa Administrativa VPO é só o rótulo "guarda-chuva" da tabela — o
+  // valor de verdade está nas 3 administradoras logo abaixo (Sem
+  // Parar/Move Mais/Taggy Strada). Remove o "%" do template junto com o
+  // token pra não sobrar um "—%" estranho na linha.
+  xml = xml.split("{{TAXA_VPO}}%").join("—");
+
   const pay = dados.pay ?? {};
   const log = dados.log ?? {};
 
@@ -64,7 +69,6 @@ export async function gerarPropostaDocx(dados: DadosProposta): Promise<Buffer> {
     "{{VTF}}": dados.vtf || "—",
     "{{LOCAL_DATA}}": dados.localData,
     "{{TAXA_FRETE}}": pay.taxaFrete || "—",
-    "{{TAXA_VPO}}": pay.taxaVpo || "—",
     "{{SEM_PARAR}}": pay.semParar || "—",
     "{{MOVE_MAIS}}": pay.moveMais || "—",
     "{{TAGGY_STRADA}}": pay.taggyStrada || "—",

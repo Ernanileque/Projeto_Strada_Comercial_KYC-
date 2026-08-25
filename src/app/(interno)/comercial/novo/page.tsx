@@ -148,9 +148,6 @@ export default function NovoCredenciamentoPage() {
                 <Campo label="Taxa administrativa Frete (%)">
                   <input name="pay_taxa_frete" placeholder="Ex.: 0,20" className={classeInput} />
                 </Campo>
-                <Campo label="Taxa administrativa VPO (%)">
-                  <input name="pay_taxa_vpo" placeholder="Ex.: 0,50" className={classeInput} />
-                </Campo>
                 <Campo label="Sem Parar (%)">
                   <input name="pay_sem_parar" placeholder="Ex.: 0,50" className={classeInput} />
                 </Campo>

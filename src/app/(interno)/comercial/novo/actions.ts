@@ -35,7 +35,6 @@ export async function criarCredenciamento(formData: FormData) {
       produto === "STRADA_PAY" || produto === "AMBOS"
         ? {
             taxaFrete: campo(formData, "pay_taxa_frete"),
-            taxaVpo: campo(formData, "pay_taxa_vpo"),
             semParar: campo(formData, "pay_sem_parar"),
             moveMais: campo(formData, "pay_move_mais"),
             taggyStrada: campo(formData, "pay_taggy_strada"),
