@@ -43,6 +43,9 @@ export default function NovoCredenciamentoPage() {
   const [razaoAuto, setRazaoAuto] = useState(false);
   const [buscandoCnpj, setBuscandoCnpj] = useState(false);
   const [avisoCnpj, setAvisoCnpj] = useState("");
+  const [produto, setProduto] = useState("STRADA_PAY");
+  const mostrarPay = produto === "STRADA_PAY" || produto === "AMBOS";
+  const mostrarLog = produto === "STRADA_LOG" || produto === "AMBOS";
 
   async function buscarCnpj(valorDigitado: string) {
     const digitos = valorDigitado.replace(/\D/g, "");
@@ -115,7 +118,13 @@ export default function NovoCredenciamentoPage() {
             </Campo>
           </div>
           <Campo label="Produto *">
-            <select name="produto" required defaultValue="STRADA_PAY" className={classeInput}>
+            <select
+              name="produto"
+              required
+              value={produto}
+              onChange={(e) => setProduto(e.target.value)}
+              className={classeInput}
+            >
               <option value="STRADA_PAY">Strada Pay</option>
               <option value="STRADA_LOG">Strada Log</option>
               <option value="AMBOS">Strada Pay + Strada Log</option>
@@ -123,11 +132,70 @@ export default function NovoCredenciamentoPage() {
           </Campo>
         </section>
 
+        <section className="space-y-3 rounded border border-black/10 bg-white p-4">
+          <h3 className="text-sm font-semibold text-strada-vinho">Condições negociadas</h3>
+          <p className="text-xs text-strada-cinza">
+            Esses valores vão preenchidos na Proposta Comercial enviada ao cliente por e-mail.
+          </p>
+          <Campo label="Estimativa de VTF transacionado por mês">
+            <input name="vtf" placeholder="Ex.: R$ 500.000,00" className={classeInput} />
+          </Campo>
+
+          {mostrarPay && (
+            <div className="space-y-3 border-t border-black/5 pt-3">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-strada-cinza">Strada Pay</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Taxa administrativa Frete (%)">
+                  <input name="pay_taxa_frete" placeholder="Ex.: 0,20" className={classeInput} />
+                </Campo>
+                <Campo label="Taxa administrativa VPO (%)">
+                  <input name="pay_taxa_vpo" placeholder="Ex.: 0,50" className={classeInput} />
+                </Campo>
+                <Campo label="Sem Parar (%)">
+                  <input name="pay_sem_parar" placeholder="Ex.: 0,50" className={classeInput} />
+                </Campo>
+                <Campo label="Move Mais (%)">
+                  <input name="pay_move_mais" placeholder="Ex.: 0,50" className={classeInput} />
+                </Campo>
+                <Campo label="Taggy Strada (%)">
+                  <input name="pay_taggy_strada" placeholder="Ex.: 0,35" className={classeInput} />
+                </Campo>
+              </div>
+            </div>
+          )}
+
+          {mostrarLog && (
+            <div className="space-y-3 border-t border-black/5 pt-3">
+              <h4 className="text-xs font-bold uppercase tracking-wide text-strada-cinza">Strada Log</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <Campo label="Gestão de Performance/lote">
+                  <input name="log_gestao_performance" className={classeInput} />
+                </Campo>
+                <Campo label="Match de Cargas">
+                  <input name="log_match_cargas" className={classeInput} />
+                </Campo>
+                <Campo label="Troca Nota">
+                  <input name="log_troca_nota" className={classeInput} />
+                </Campo>
+                <Campo label="Gerenciamento de Risco">
+                  <input name="log_gerenciamento_risco" className={classeInput} />
+                </Campo>
+                <Campo label="Módulo Portaria Tracking">
+                  <input name="log_portaria_tracking" className={classeInput} />
+                </Campo>
+                <Campo label="BID">
+                  <input name="log_bid" className={classeInput} />
+                </Campo>
+              </div>
+            </div>
+          )}
+        </section>
+
         <button
           type="submit"
           className="rounded bg-strada-laranja px-4 py-2 text-sm font-medium text-white"
         >
-          Abrir solicitação
+          Abrir solicitação e enviar proposta por e-mail
         </button>
       </form>
     </div>

@@ -4,7 +4,12 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CopiarLink } from "@/components/CopiarLink";
 import { headers } from "next/headers";
 
-export default async function ComercialPage() {
+export default async function ComercialPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ aviso?: string }>;
+}) {
+  const { aviso } = await searchParams;
   const supabase = await createClient();
   const headersList = await headers();
   const origem = `https://${headersList.get("host")}`;
@@ -25,6 +30,14 @@ export default async function ComercialPage() {
           Novo credenciamento
         </Link>
       </div>
+
+      {aviso === "proposta_falhou" && (
+        <div className="mb-4 rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          O credenciamento foi criado, mas a proposta comercial não pôde ser gerada/enviada por e-mail
+          automaticamente (provavelmente o envio de e-mail ainda não está configurado). Copie o link
+          manualmente e envie a proposta por fora, por enquanto.
+        </div>
+      )}
 
       <div className="overflow-x-auto rounded border border-black/10 bg-white">
         <table className="w-full text-sm">
