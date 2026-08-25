@@ -41,6 +41,18 @@ interface DadosFichaEnviados {
 type ResultadoUpload = { caminho: string; signedToken: string } | { erro: string };
 
 /**
+ * Remove acentos e troca qualquer caractere fora de [a-zA-Z0-9._-] por "_".
+ * Nomes de documentos reais costumam ter "°", "Ã", espaços etc., que o
+ * Storage rejeita na chave do objeto ("Invalid key").
+ */
+function sanitizarNomeArquivo(nomeArquivo: string): string {
+  return nomeArquivo
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+/**
  * Gera uma URL assinada de upload direto pro Storage (o navegador manda o
  * arquivo direto pro Supabase, sem passar pelo corpo da Server Action —
  * que tem limite de 1MB e estourava fácil com vários PDFs reais).
@@ -61,7 +73,7 @@ export async function prepararUpload(
     return { erro: "Link inválido ou já utilizado." };
   }
 
-  const caminho = `${credenciamento.id}/${Date.now()}-${nomeArquivo}`;
+  const caminho = `${credenciamento.id}/${Date.now()}-${sanitizarNomeArquivo(nomeArquivo)}`;
   const { data, error } = await admin.storage.from("documentos").createSignedUploadUrl(caminho);
 
   if (error || !data) {
