@@ -1,6 +1,7 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { montarFichaHtml, converterHtmlParaPdf } from "@/lib/compliance/fichaPdf";
 
 type ResultadoEnvio = { erro: string } | { sucesso: true };
 
@@ -217,6 +218,32 @@ export async function enviarFichaKyc(
       dados_json: dados as never,
     });
     if (erroFicha) throw new Error(erroFicha.message);
+
+    // Gera um PDF da ficha preenchida e anexa junto com os demais
+    // documentos — o Compliance pediu isso explicitamente pra ter a
+    // ficha num formato que possa arquivar/circular como os outros
+    // documentos. Best-effort: se a conversão falhar, não trava o
+    // envio da ficha (os dados já estão salvos em ficha_kyc de
+    // qualquer forma, o Compliance ainda consegue ver tudo na tela).
+    try {
+      const razaoSocial = (dados.empresa as Record<string, string> | undefined)?.razao || "—";
+      const html = montarFichaHtml(dados, sociosParaInserir, testemunha, razaoSocial);
+      const pdfBuffer = await converterHtmlParaPdf(html);
+      const caminhoFichaPdf = `${credenciamentoId}/ficha-kyc.pdf`;
+      const { error: erroUploadFicha } = await admin.storage
+        .from("documentos")
+        .upload(caminhoFichaPdf, pdfBuffer, { contentType: "application/pdf", upsert: true });
+      if (!erroUploadFicha) {
+        await admin.from("documento").insert({
+          credenciamento_id: credenciamentoId,
+          tipo: "ficha_cadastral",
+          arquivo_url: caminhoFichaPdf,
+        });
+        await admin.from("ficha_kyc").update({ pdf_url: caminhoFichaPdf }).eq("credenciamento_id", credenciamentoId);
+      }
+    } catch (e) {
+      console.error("Falha ao gerar PDF da ficha KYC:", e);
+    }
 
     const { error: erroStatus } = await admin
       .from("credenciamento")
