@@ -13,10 +13,15 @@ export default async function CompliancePage() {
 
   return (
     <div>
-      <h2 className="mb-1 text-lg font-semibold">Compliance</h2>
-      <p className="mb-4 text-sm text-strada-cinza">
-        Fila de análise cadastral e KYC — SLA de 24h.
-      </p>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Compliance</h2>
+          <p className="text-sm text-strada-cinza">Fila de análise cadastral e KYC — SLA de 24h.</p>
+        </div>
+        <Link href="/compliance/historico" className="text-sm font-medium text-strada-laranja hover:underline">
+          Ver histórico →
+        </Link>
+      </div>
 
       <div className="overflow-x-auto rounded border border-black/10 bg-white">
         <table className="w-full text-sm">
