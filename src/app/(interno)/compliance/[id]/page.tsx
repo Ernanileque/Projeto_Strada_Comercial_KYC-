@@ -6,8 +6,11 @@ import { ValidadorPainel } from "./ValidadorPainel";
 
 // As Server Actions desta página (analisarCredenciamento) herdam o
 // maxDuration da rota que as invoca, não só do arquivo de actions —
-// por isso precisa estar declarado aqui também.
-export const maxDuration = 60;
+// por isso precisa estar declarado aqui também. Cadastral e compliance
+// rodam em paralelo, mas cada uma pode tentar de novo uma vez sozinha
+// se a resposta vier cortada — com documentos reais grandes isso já
+// chegou perto dos 60s antigos.
+export const maxDuration = 120;
 
 const ROTULO_TIPO_DOCUMENTO: Record<string, string> = {
   contrato_social: "Contrato social",

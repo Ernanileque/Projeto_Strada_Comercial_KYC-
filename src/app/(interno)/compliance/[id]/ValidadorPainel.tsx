@@ -191,13 +191,21 @@ export function ValidadorPainel({
   async function rodarAnalise() {
     setAnalisando(true);
     setErro(null);
-    const resposta = await analisarCredenciamento(credenciamentoId, incluirReputacional);
-    setAnalisando(false);
-    if ("erro" in resposta) {
-      setErro(resposta.erro);
-      return;
+    try {
+      const resposta = await analisarCredenciamento(credenciamentoId, incluirReputacional);
+      if ("erro" in resposta) {
+        setErro(resposta.erro);
+        return;
+      }
+      setResultado(resposta.resultado);
+    } catch {
+      // Falha de rede/timeout na chamada da Server Action em si (não um
+      // erro tratado dentro dela) — sem isso o botão ficava travado em
+      // "Analisando..." pra sempre, sem nunca mostrar erro.
+      setErro("A análise demorou demais ou perdeu a conexão. Tente novamente.");
+    } finally {
+      setAnalisando(false);
     }
-    setResultado(resposta.resultado);
   }
 
   async function aprovar() {
@@ -243,7 +251,7 @@ export function ValidadorPainel({
             disabled={analisando}
             className="rounded bg-strada-laranja px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
-            {analisando ? "Analisando… (pode levar até 1 minuto)" : "Analisar com IA"}
+            {analisando ? "Analisando… (pode levar até 2 minutos)" : "Analisar com IA"}
           </button>
           <label className="flex items-center gap-2 text-xs text-strada-cinza">
             <input
