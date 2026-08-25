@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { criarCredenciamento } from "./actions";
 import { validarCnpj } from "@/lib/portal/extracao";
+import { formatarMoeda, formatarPercentual } from "@/lib/formatacao";
 
 function Campo({
   label,
@@ -46,6 +47,12 @@ export default function NovoCredenciamentoPage() {
   const [produto, setProduto] = useState("STRADA_PAY");
   const mostrarPay = produto === "STRADA_PAY" || produto === "AMBOS";
   const mostrarLog = produto === "STRADA_LOG" || produto === "AMBOS";
+
+  const [vtf, setVtf] = useState("");
+  const [taxaFrete, setTaxaFrete] = useState("");
+  const [semParar, setSemParar] = useState("");
+  const [moveMais, setMoveMais] = useState("");
+  const [taggyStrada, setTaggyStrada] = useState("");
 
   async function buscarCnpj(valorDigitado: string) {
     const digitos = valorDigitado.replace(/\D/g, "");
@@ -137,8 +144,14 @@ export default function NovoCredenciamentoPage() {
           <p className="text-xs text-strada-cinza">
             Esses valores vão preenchidos na Proposta Comercial enviada ao cliente por e-mail.
           </p>
-          <Campo label="Estimativa de VTF transacionado por mês">
-            <input name="vtf" placeholder="Ex.: R$ 500.000,00" className={classeInput} />
+          <Campo label="Estimativa de VTF transacionado por mês (R$)">
+            <input
+              name="vtf"
+              placeholder="Ex.: 500.000,00"
+              value={vtf}
+              onChange={(e) => setVtf(formatarMoeda(e.target.value))}
+              className={classeInput}
+            />
           </Campo>
 
           {mostrarPay && (
@@ -146,16 +159,40 @@ export default function NovoCredenciamentoPage() {
               <h4 className="text-xs font-bold uppercase tracking-wide text-strada-cinza">Strada Pay</h4>
               <div className="grid grid-cols-2 gap-3">
                 <Campo label="Taxa administrativa Frete (%)">
-                  <input name="pay_taxa_frete" placeholder="Ex.: 0,20" className={classeInput} />
+                  <input
+                    name="pay_taxa_frete"
+                    placeholder="Ex.: 0,20"
+                    value={taxaFrete}
+                    onChange={(e) => setTaxaFrete(formatarPercentual(e.target.value))}
+                    className={classeInput}
+                  />
                 </Campo>
                 <Campo label="Sem Parar (%)">
-                  <input name="pay_sem_parar" placeholder="Ex.: 0,50" className={classeInput} />
+                  <input
+                    name="pay_sem_parar"
+                    placeholder="Ex.: 0,50"
+                    value={semParar}
+                    onChange={(e) => setSemParar(formatarPercentual(e.target.value))}
+                    className={classeInput}
+                  />
                 </Campo>
                 <Campo label="Move Mais (%)">
-                  <input name="pay_move_mais" placeholder="Ex.: 0,50" className={classeInput} />
+                  <input
+                    name="pay_move_mais"
+                    placeholder="Ex.: 0,50"
+                    value={moveMais}
+                    onChange={(e) => setMoveMais(formatarPercentual(e.target.value))}
+                    className={classeInput}
+                  />
                 </Campo>
                 <Campo label="Taggy Strada (%)">
-                  <input name="pay_taggy_strada" placeholder="Ex.: 0,35" className={classeInput} />
+                  <input
+                    name="pay_taggy_strada"
+                    placeholder="Ex.: 0,35"
+                    value={taggyStrada}
+                    onChange={(e) => setTaggyStrada(formatarPercentual(e.target.value))}
+                    className={classeInput}
+                  />
                 </Campo>
               </div>
             </div>

@@ -16,19 +16,12 @@ import {
   type DadosEmpresaExtraidos,
   type ResultadoAnalise,
 } from "@/lib/portal/extracao";
+import { formatarMoeda, formatarPercentual } from "@/lib/formatacao";
 
 const classeInput =
   "w-full rounded border border-black/10 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none";
 const classeInputAuto =
   "w-full rounded border-l-2 border-emerald-500 bg-emerald-50 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none";
-
-/** Máscara de moeda: cada dígito digitado entra como centavo, ex. "123456" vira "1.234,56". */
-function formatarMoeda(valorDigitado: string): string {
-  const digitos = valorDigitado.replace(/\D/g, "");
-  if (!digitos) return "";
-  const numero = parseInt(digitos, 10) / 100;
-  return numero.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function Campo({
   label,
@@ -841,7 +834,7 @@ export function FormularioPortal({
               <input
                 required
                 value={conta.saldoMinimo}
-                onChange={(e) => setConta({ ...conta, saldoMinimo: e.target.value })}
+                onChange={(e) => setConta({ ...conta, saldoMinimo: formatarMoeda(e.target.value) })}
                 className={classeInput}
               />
             </Campo>
@@ -858,10 +851,20 @@ export function FormularioPortal({
         <Secao numero="07" titulo="Capital social">
           <div className="grid grid-cols-3 gap-3">
             <Campo label="Capital social (R$) *">
-              <input required value={capital.valor} onChange={(e) => setCapital({ ...capital, valor: e.target.value })} className={classeInput} />
+              <input
+                required
+                value={capital.valor}
+                onChange={(e) => setCapital({ ...capital, valor: formatarMoeda(e.target.value) })}
+                className={classeInput}
+              />
             </Campo>
             <Campo label="Valor unitário da quota (R$) *">
-              <input required value={capital.valorQuota} onChange={(e) => setCapital({ ...capital, valorQuota: e.target.value })} className={classeInput} />
+              <input
+                required
+                value={capital.valorQuota}
+                onChange={(e) => setCapital({ ...capital, valorQuota: formatarMoeda(e.target.value) })}
+                className={classeInput}
+              />
             </Campo>
             <Campo label="Total de quotas *">
               <input required value={capital.totalQuotas} onChange={(e) => setCapital({ ...capital, totalQuotas: e.target.value })} className={classeInput} />
@@ -922,7 +925,9 @@ export function FormularioPortal({
                 <input
                   required
                   value={s.renda}
-                  onChange={(e) => setSocios(socios.map((x, xi) => (xi === i ? { ...x, renda: e.target.value } : x)))}
+                  onChange={(e) =>
+                    setSocios(socios.map((x, xi) => (xi === i ? { ...x, renda: formatarMoeda(e.target.value) } : x)))
+                  }
                   className={classeInput}
                 />
               </Campo>
@@ -938,7 +943,9 @@ export function FormularioPortal({
                 <input
                   required
                   value={s.pct}
-                  onChange={(e) => setSocios(socios.map((x, xi) => (xi === i ? { ...x, pct: e.target.value } : x)))}
+                  onChange={(e) =>
+                    setSocios(socios.map((x, xi) => (xi === i ? { ...x, pct: formatarPercentual(e.target.value) } : x)))
+                  }
                   className={s.auto && s.pct ? classeInputAuto : classeInput}
                 />
               </Campo>
