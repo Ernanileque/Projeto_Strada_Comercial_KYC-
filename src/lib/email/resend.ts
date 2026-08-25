@@ -1,11 +1,11 @@
 import { Resend } from "resend";
 
 const CHECKLIST_DOCUMENTOS = [
-  "Contrato social consolidado (ou Estatuto Social + Ata de eleição da diretoria, se aplicável)",
+  "Contrato social ou última alteração",
   "Cartão CNPJ",
-  "RG ou CNH de quem vai assinar pela empresa",
-  "Comprovante de endereço da empresa",
-  "Dados bancários para o fluxo financeiro",
+  "Proposta comercial aceita",
+  "Documento pessoal dos assinantes (RG/CNH)",
+  "Quadro de sócios e administradores (QSA)",
 ];
 
 interface DadosEmailProposta {
