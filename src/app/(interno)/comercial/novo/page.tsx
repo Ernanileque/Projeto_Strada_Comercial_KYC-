@@ -1,9 +1,30 @@
 "use client";
 
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
 import { criarCredenciamento } from "./actions";
 import { validarCnpj } from "@/lib/portal/extracao";
 import { formatarMoeda, formatarPercentual } from "@/lib/formatacao";
+
+/**
+ * useFormStatus só enxerga o estado do <form> a partir de um componente
+ * filho dele — por isso não dá pra usar o hook direto na página que
+ * renderiza o <form>. Sem isso, cliques repetidos enquanto a Server
+ * Action ainda está rodando (busca CNPJ, geração de PDF, envio de
+ * e-mail) criavam um credenciamento duplicado por clique.
+ */
+function BotaoEnviar() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="rounded bg-strada-laranja px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+    >
+      {pending ? "Enviando…" : "Abrir solicitação e enviar proposta por e-mail"}
+    </button>
+  );
+}
 
 function Campo({
   label,
@@ -225,12 +246,7 @@ export default function NovoCredenciamentoPage() {
           )}
         </section>
 
-        <button
-          type="submit"
-          className="rounded bg-strada-laranja px-4 py-2 text-sm font-medium text-white"
-        >
-          Abrir solicitação e enviar proposta por e-mail
-        </button>
+        <BotaoEnviar />
       </form>
     </div>
   );
