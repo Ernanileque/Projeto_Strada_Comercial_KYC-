@@ -62,6 +62,17 @@ function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode
   );
 }
 
+/**
+ * Cartão CNPJ e QSA compartilham o mesmo tipo/rótulo ("Cartão CNPJ /
+ * QSA") — sem isso, dois arquivos diferentes desse tipo pareciam
+ * duplicados na lista. O caminho no Storage é
+ * "{credenciamentoId}/{timestamp}-{nomeOriginal}"; extrai só o nome.
+ */
+function nomeOriginalArquivo(caminho: string): string {
+  const arquivo = caminho.split("/").pop() ?? caminho;
+  return arquivo.replace(/^\d+-/, "");
+}
+
 function Campo({ label, valor }: { label: string; valor?: string | number | null }) {
   return (
     <div>
@@ -291,6 +302,7 @@ export default async function CredenciamentoCompliancePage({
             <li key={d.id} className="flex items-center justify-between gap-3 py-2 text-sm">
               <div>
                 <span className="font-medium">{ROTULO_TIPO_DOCUMENTO[d.tipo] ?? d.tipo}</span>
+                <span className="ml-2 text-xs text-strada-cinza">{nomeOriginalArquivo(d.arquivo_url)}</span>
                 <span className="ml-2 text-xs text-strada-cinza">
                   {new Date(d.enviado_em).toLocaleDateString("pt-BR")}
                 </span>
