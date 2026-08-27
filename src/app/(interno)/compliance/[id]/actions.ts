@@ -219,35 +219,3 @@ export async function negarCredenciamento(
     return { erro: e instanceof Error ? e.message : "Erro ao negar o credenciamento." };
   }
 }
-
-export async function devolverAoCliente(
-  credenciamentoId: string,
-  motivo: string,
-): Promise<{ erro?: string }> {
-  try {
-    const { supabase, userId } = await exigirUsuarioCompliance();
-
-    if (!motivo.trim()) return { erro: "Informe o motivo da devolução." };
-
-    const { error: erroValidacao } = await supabase.from("validacao").insert({
-      credenciamento_id: credenciamentoId,
-      validador: "compliance_manual",
-      resultado: "NAO_APTO",
-      alertas_json: { motivo } as never,
-      validado_por: userId,
-    });
-    if (erroValidacao) return { erro: erroValidacao.message };
-
-    const { error: erroStatus } = await supabase
-      .from("credenciamento")
-      .update({ status: "DEVOLVIDO" })
-      .eq("id", credenciamentoId);
-    if (erroStatus) return { erro: erroStatus.message };
-
-    revalidatePath(`/compliance/${credenciamentoId}`);
-    revalidatePath("/compliance");
-    return {};
-  } catch (e) {
-    return { erro: e instanceof Error ? e.message : "Erro ao devolver." };
-  }
-}

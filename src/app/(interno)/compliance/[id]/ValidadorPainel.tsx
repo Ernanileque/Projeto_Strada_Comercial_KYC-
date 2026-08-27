@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  analisarCredenciamento,
-  aprovarCredenciamento,
-  devolverAoCliente,
-  negarCredenciamento,
-} from "./actions";
+import { analisarCredenciamento, aprovarCredenciamento, negarCredenciamento } from "./actions";
 import type { ResultadoValidador } from "@/lib/compliance/validador";
 
 interface ValidacaoRegistro {
@@ -181,8 +176,6 @@ export function ValidadorPainel({
   const [analisando, setAnalisando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [mostrarDevolver, setMostrarDevolver] = useState(false);
-  const [motivo, setMotivo] = useState("");
   const [mostrarNegar, setMostrarNegar] = useState(false);
   const [motivoNegativa, setMotivoNegativa] = useState("");
   const [enviandoDecisao, setEnviandoDecisao] = useState(false);
@@ -211,17 +204,6 @@ export function ValidadorPainel({
   async function aprovar() {
     setEnviandoDecisao(true);
     const resposta = await aprovarCredenciamento(credenciamentoId);
-    setEnviandoDecisao(false);
-    if (resposta.erro) {
-      setErro(resposta.erro);
-      return;
-    }
-    setDecisaoTomada(true);
-  }
-
-  async function confirmarDevolucao() {
-    setEnviandoDecisao(true);
-    const resposta = await devolverAoCliente(credenciamentoId, motivo);
     setEnviandoDecisao(false);
     if (resposta.erro) {
       setErro(resposta.erro);
@@ -288,14 +270,6 @@ export function ValidadorPainel({
             </button>
             <button
               type="button"
-              onClick={() => setMostrarDevolver(true)}
-              disabled={enviandoDecisao}
-              className="rounded border border-strada-vinho px-4 py-2 text-sm font-medium text-strada-vinho disabled:opacity-60"
-            >
-              Devolver ao cliente
-            </button>
-            <button
-              type="button"
               onClick={() => setMostrarNegar(true)}
               disabled={enviandoDecisao}
               className="rounded border border-red-700 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60"
@@ -303,25 +277,6 @@ export function ValidadorPainel({
               Negar (devolver ao Comercial)
             </button>
           </div>
-          {mostrarDevolver && (
-            <div className="space-y-2 border-t border-black/5 pt-3">
-              <textarea
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                rows={2}
-                placeholder="Motivo da devolução (o que o cliente precisa corrigir)"
-                className="w-full rounded border border-black/10 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={confirmarDevolucao}
-                disabled={enviandoDecisao}
-                className="rounded bg-strada-vinho px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              >
-                Confirmar devolução
-              </button>
-            </div>
-          )}
           {mostrarNegar && (
             <div className="space-y-2 border-t border-black/5 pt-3">
               <textarea
