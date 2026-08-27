@@ -187,54 +187,55 @@ O campo "dossie" é OBRIGATÓRIO, NUNCA pode ser omitido e vem ANTES de "benefic
 O array "beneficiarios" é OBRIGATÓRIO: um objeto para CADA sócio/acionista com 25% ou mais. Se nenhum sócio atingir 25%, ou se o quadro societário não puder ser identificado, inclua UMA linha com nome "Não identificado", gravidade "atencao" e recomendação indicando o documento necessário. NUNCA omita o array.
 IMPORTANTE — LIMITE DE TAMANHO: o dossiê deve ser fiel aos documentos, porém conciso (sem repetições, no máximo 250 palavras). Liste no máximo 6 beneficiários (priorize as maiores participações). Respostas longas serão cortadas e invalidarão a análise.`;
 
-const PROMPT_REPUTACIONAL = `Você é um analista de due diligence reputacional de uma instituição financeira brasileira. Sua tarefa: pesquisar na web notícias e menções recentes da empresa e das pessoas identificadas nos documentos anexados.
+/**
+ * Uma chamada só pesquisando empresa + todos os sócios em sequência
+ * estourava o teto de 120s do plano Hobby da Vercel — cada busca soma
+ * uma ida e volta real de rede, e isso é sequencial dentro da mesma
+ * conversa. Por isso viraram N chamadas independentes (uma por
+ * entidade), disparadas em paralelo — o tempo total passa a ser o da
+ * mais lenta, não a soma de todas.
+ */
+function promptReputacionalEntidade(tipoEntidade: "EMPRESA" | "PESSOA"): string {
+  return `Você é um analista de due diligence reputacional de uma instituição financeira brasileira. Sua tarefa: pesquisar na web notícias e menções recentes sobre ${
+    tipoEntidade === "EMPRESA" ? "a empresa informada abaixo" : "a pessoa física ou jurídica informada abaixo"
+  }.
 
 # Passos de execução
-1. LER A BASE: identifique nos documentos a empresa analisada e as pessoas físicas e jurídicas relevantes (sócios PF, sócias PJ, administradores/diretores).
-2. BUSCAR CADA NOME na web: pesquise o nome completo e variações úteis para ampliar cobertura. Para a empresa, pesquise também notícias sobre ela e valide se há citação nominal de executivos, sócios ou administradores.
-3. LER E VALIDAR: não se limite à manchete — leia o corpo do conteúdo e confirme o contexto da citação. Descarte resultados sem data clara, fonte confiável ou conteúdo suficiente.
-4. TRABALHE COM MATCH EXATO DE NOME ao consolidar: diferencie fato confirmado, inferência e associação indireta. Não trate perfis públicos ou menções ambíguas como evidência conclusiva.
-5. SEPARE as análises em dois blocos: EMPRESA e SÓCIOS/ADMINISTRADORES.
+1. Pesquise o nome informado na web (nome completo e variações úteis pra ampliar cobertura).
+2. Leia o corpo do conteúdo, não só a manchete, e confirme o contexto real da citação.
+3. Descarte resultados sem data clara, fonte confiável ou conteúdo suficiente.
+4. Diferencie fato confirmado, inferência e associação indireta. Não trate perfis públicos ou menções ambíguas como evidência conclusiva.
 
 # Tipos de notícias a capturar
-Capture TODAS as notícias recentes relevantes, independentemente do tom: notícias adversas (crime, sanções, processos, escândalos), neutras (transações, parcerias, mudanças), e positivas (prêmios, reconhecimentos, crescimento). Dê especial atenção a notícias nos últimos 30 dias.
+Notícias adversas (crime, sanções, processos, escândalos), neutras (transações, parcerias, mudanças) e positivas (prêmios, reconhecimentos, crescimento). Atenção especial a notícias dos últimos 30 dias.
 
 # Fontes a priorizar
 Mídia nacional e regional confiável; atos regulatórios e diários oficiais; menções públicas a processos judiciais; menções públicas a listas PEP, sanções e outras listas sensíveis; comunicados de imprensa e parcerias empresariais.
 
 # Classificação obrigatória de cada achado (campo "tipo")
-- "direta": Citação Nominal Direta — nome no título ou manchete.
-- "contextual": Adverse Media Nominal (Contextual) OU Menção Contextual Recente — nome no corpo da matéria, especialmente como executivo, diretor, sócio ou administrador.
-- "indireta": Adverse Media Indireta OU Menção Indireta — empresa citada sem nome nominal do alvo.
-REGRA CRÍTICA: se a empresa aparece em notícia de qualquer tipo, leia o conteúdo e verifique se o nome de sócio/administrador aparece no corpo. Se aparecer, reclassifique o achado da pessoa como "contextual".
+- "direta": nome no título ou manchete.
+- "contextual": nome no corpo da matéria, especialmente no papel de executivo, diretor, sócio ou administrador.
+- "indireta": citação sem nome nominal do alvo.
 
 # Gravidade
-- "atencao": achado adverso confirmado (direta ou contextual), OU menção contextual recente relevante da empresa ou pessoas (parcerias, transações significativas, etc.).
+- "atencao": achado adverso confirmado (direta ou contextual), OU menção contextual recente relevante (parcerias, transações significativas etc.).
 - "ok": menção neutra/positiva relevante confirmada, ou verificação concluída sem desabono.
 
-# Campos de cada achado
-"nome" (nome/razão social citado), "tipo" (direta|contextual|indireta), "resumo" (inclua função/cargo/papel quando houver, e o contexto real da matéria), "data" (da publicação), "periodo" ("últimos 30 dias" | "até 6 meses" | "6 a 12 meses" | "acima de 12 meses"), "fonte" (veículo e, se possível, link), "gravidade".
-
-# Frases-padrão para as sínteses
+# Frases-padrão para a síntese
 - Ausência: "Não foram localizadas notícias com citação nominal direta ou contextual."
 - Menção neutra/positiva: "NOME foi citado nominalmente no corpo de matéria jornalística no contexto de CONTEXTO (ex.: parceria empresarial, mudança de função, prêmio, etc.) em VEÍCULO em DATA."
 - Achado adverso contextual: "NOME foi citado nominalmente no corpo de matéria jornalística no contexto de sua atuação pessoal ou de sua função executiva/administrativa em entidade envolvida em evento adverso."
 
-RESPONDA APENAS COM JSON VÁLIDO, sem markdown, sem crases, sem texto antes ou depois, exatamente neste formato E NESTA ORDEM:
+RESPONDA APENAS COM JSON VÁLIDO, sem markdown, sem crases, sem texto antes ou depois, exatamente neste formato:
 {
-  "empresa": string,
-  "empresa_sintese": string,
-  "socios_sintese": string,
-  "empresa_achados": [
-    {"nome": string, "tipo": "direta" | "contextual" | "indireta", "resumo": string, "data": string, "periodo": string, "fonte": string, "gravidade": "atencao" | "ok"}
-  ],
-  "socios_achados": [
+  "sintese": string,
+  "achados": [
     {"nome": string, "tipo": "direta" | "contextual" | "indireta", "resumo": string, "data": string, "periodo": string, "fonte": string, "gravidade": "atencao" | "ok"}
   ]
 }
-As sínteses são OBRIGATÓRIAS: use as frases-padrão quando aplicável; declare SEMPRE qualquer menção recente relevante encontrada. Os arrays podem vir vazios quando não houver achado válido — a síntese cobre a ausência.
-NÃO entregue relatório parcial, checklist vazio ou campos para preenchimento posterior. Se uma notícia não tiver data clara, fonte confiável ou conteúdo suficiente, descarte.
-IMPORTANTE — LIMITE DE TAMANHO: no máximo 4 achados por bloco (priorize os mais recentes). "resumo" com no máximo 20 palavras. Respostas longas serão cortadas e invalidarão a análise.`;
+A síntese é OBRIGATÓRIA: use as frases-padrão quando aplicável; declare SEMPRE qualquer menção recente relevante encontrada. O array pode vir vazio quando não houver achado válido — a síntese cobre a ausência.
+IMPORTANTE — LIMITE DE TAMANHO: no máximo 3 achados. "resumo" com no máximo 20 palavras. Respostas longas serão cortadas e invalidarão a análise.`;
+}
 
 /* ---------- chamadas à API ---------- */
 
@@ -400,31 +401,67 @@ export async function rodarAnaliseCadastralCompliance(
   return { cadastral, compliance, erros };
 }
 
-// Reduzido de 8 pra 3 buscas — mesmo com 4 buscas, um teste real
-// estourou os 120s configurados na função. Cada busca soma uma ida e
-// volta real de rede + leitura de conteúdo, então é o maior fator de
-// tempo da análise reputacional, mais que o tamanho da resposta final.
-const MAX_BUSCAS_REPUTACIONAL = 3;
+// Cada entidade pesquisada sozinha, então poucas buscas já dão boa
+// cobertura — o paralelismo entre entidades é que ganha tempo, não o
+// número de buscas por entidade.
+const MAX_BUSCAS_POR_ENTIDADE = 2;
 
 export interface OpcoesAnaliseReputacional {
   empresa: string;
   pessoas: string[];
 }
 
+interface ResultadoEntidadeReputacional {
+  sintese: string;
+  achados: AchadoReputacional[];
+}
+
+async function pesquisarEntidade(
+  client: Anthropic,
+  nome: string,
+  tipoEntidade: "EMPRESA" | "PESSOA",
+): Promise<ResultadoEntidadeReputacional> {
+  return chamarAnalise<ResultadoEntidadeReputacional>(
+    client,
+    [],
+    `Nome a pesquisar: ${nome}`,
+    promptReputacionalEntidade(tipoEntidade),
+    [{ type: "web_search_20260318", name: "web_search", max_uses: MAX_BUSCAS_POR_ENTIDADE }],
+  );
+}
+
 /**
  * Diferente da cadastral/compliance, a reputacional não precisa reler
  * os documentos — só precisa dos nomes (empresa + sócios/administradores),
- * que a etapa cadastral/compliance já extraiu. Reenviar os PDFs/imagens
- * de novo só pra descobrir os mesmos nomes consumia boa parte do tempo
- * antes mesmo da primeira busca na web começar — foi isso, combinado
- * com o teto de 120s do plano Hobby da Vercel, que fazia estourar.
+ * que a etapa cadastral/compliance já extraiu. Além disso, cada entidade
+ * é pesquisada numa chamada própria, todas em paralelo — antes, uma
+ * chamada só pesquisava tudo em sequência (empresa, depois sócio 1,
+ * depois sócio 2...) e isso somava tempo real de rede até estourar o
+ * teto de 120s do plano Hobby da Vercel. Em paralelo, o tempo total é
+ * o da entidade mais lenta, não a soma de todas.
  */
 export async function rodarAnaliseReputacional(opcoes: OpcoesAnaliseReputacional): Promise<AnaliseReputacional> {
   const client = clienteAnthropic();
-  const resumo = `Empresa a pesquisar: ${opcoes.empresa}\n\nPessoas físicas/jurídicas relevantes (sócios, administradores) a pesquisar:\n${opcoes.pessoas.map((p) => `- ${p}`).join("\n") || "- (nenhum nome identificado)"}`;
-  return chamarAnalise<AnaliseReputacional>(client, [], resumo, PROMPT_REPUTACIONAL, [
-    { type: "web_search_20260318", name: "web_search", max_uses: MAX_BUSCAS_REPUTACIONAL },
+
+  const [resultadoEmpresa, ...resultadosPessoas] = await Promise.allSettled([
+    pesquisarEntidade(client, opcoes.empresa, "EMPRESA"),
+    ...opcoes.pessoas.map((nome) => pesquisarEntidade(client, nome, "PESSOA")),
   ]);
+
+  const empresaOk = resultadoEmpresa.status === "fulfilled" ? resultadoEmpresa.value : null;
+  const pessoasOk = resultadosPessoas
+    .filter((r): r is PromiseFulfilledResult<ResultadoEntidadeReputacional> => r.status === "fulfilled")
+    .map((r) => r.value);
+
+  return {
+    empresa: opcoes.empresa,
+    empresa_sintese: empresaOk?.sintese ?? "Não foi possível concluir a pesquisa reputacional da empresa.",
+    socios_sintese: pessoasOk.length
+      ? pessoasOk.map((p) => p.sintese).join(" ")
+      : "Não foi possível concluir a pesquisa reputacional dos sócios/administradores.",
+    empresa_achados: empresaOk?.achados ?? [],
+    socios_achados: pessoasOk.flatMap((p) => p.achados),
+  };
 }
 
 export function montarResultadoValidador(
