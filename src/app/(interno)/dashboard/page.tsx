@@ -9,7 +9,7 @@ function horasDesde(data: string): number {
 }
 
 // implantação ainda não tem tela de detalhe (Fase 5 não construída ainda)
-const AREAS_COM_DETALHE = new Set(["comercial", "compliance", "juridico"]);
+const AREAS_COM_DETALHE = new Set(["comercial", "compliance", "juridico", "implantacao"]);
 
 function formatarDuracao(horas: number): string {
   if (horas < 24) return `${Math.floor(horas)}h`;
