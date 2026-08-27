@@ -4,13 +4,13 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { VerDocumentoBotao } from "../VerDocumentoBotao";
 import { ValidadorPainel } from "./ValidadorPainel";
 
-// As Server Actions desta página (analisarCredenciamento) herdam o
-// maxDuration da rota que as invoca, não só do arquivo de actions —
-// por isso precisa estar declarado aqui também. Cadastral e compliance
-// rodam em paralelo, mas cada uma pode tentar de novo uma vez sozinha
-// se a resposta vier cortada — com documentos reais grandes isso já
-// chegou perto dos 60s antigos.
-export const maxDuration = 120;
+// As Server Actions desta página (analisarCredenciamento,
+// analisarReputacional) herdam o maxDuration da rota que as invoca,
+// não só do arquivo de actions — por isso precisa estar declarado
+// aqui também. A reputacional (busca na web + várias idas e vindas de
+// tool use) já estourou 120s num teste real — 300s dá margem real de
+// verdade em vez de só adiar o mesmo problema.
+export const maxDuration = 300;
 
 const ROTULO_TIPO_DOCUMENTO: Record<string, string> = {
   contrato_social: "Contrato social",

@@ -278,7 +278,7 @@ export function ValidadorPainel({
         {analisandoReputacional && (
           <p className="flex items-center gap-2 rounded border border-black/10 bg-gray-50 p-3 text-sm text-strada-cinza">
             <span className="h-2 w-2 animate-pulse rounded-full bg-strada-laranja" />
-            Buscando reputação na web (pode levar até 1 minuto)… o restante da análise já está pronto acima.
+            Buscando reputação na web (pode levar alguns minutos)… o restante da análise já está pronto acima.
           </p>
         )}
       </Bloco>

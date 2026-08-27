@@ -400,9 +400,11 @@ export async function rodarAnaliseCadastralCompliance(
   return { cadastral, compliance, erros };
 }
 
-// Reduzido de 8 pra 4 buscas — a análise reputacional era a etapa mais
-// lenta do Validador (podia passar de 1-2 minutos sozinha).
-const MAX_BUSCAS_REPUTACIONAL = 4;
+// Reduzido de 8 pra 3 buscas — mesmo com 4 buscas, um teste real
+// estourou os 120s configurados na função. Cada busca soma uma ida e
+// volta real de rede + leitura de conteúdo, então é o maior fator de
+// tempo da análise reputacional, mais que o tamanho da resposta final.
+const MAX_BUSCAS_REPUTACIONAL = 3;
 
 export async function rodarAnaliseReputacional(opcoes: OpcoesAnaliseBase): Promise<AnaliseReputacional> {
   const client = clienteAnthropic();
