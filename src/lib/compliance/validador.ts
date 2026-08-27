@@ -406,9 +406,23 @@ export async function rodarAnaliseCadastralCompliance(
 // tempo da análise reputacional, mais que o tamanho da resposta final.
 const MAX_BUSCAS_REPUTACIONAL = 3;
 
-export async function rodarAnaliseReputacional(opcoes: OpcoesAnaliseBase): Promise<AnaliseReputacional> {
+export interface OpcoesAnaliseReputacional {
+  empresa: string;
+  pessoas: string[];
+}
+
+/**
+ * Diferente da cadastral/compliance, a reputacional não precisa reler
+ * os documentos — só precisa dos nomes (empresa + sócios/administradores),
+ * que a etapa cadastral/compliance já extraiu. Reenviar os PDFs/imagens
+ * de novo só pra descobrir os mesmos nomes consumia boa parte do tempo
+ * antes mesmo da primeira busca na web começar — foi isso, combinado
+ * com o teto de 120s do plano Hobby da Vercel, que fazia estourar.
+ */
+export async function rodarAnaliseReputacional(opcoes: OpcoesAnaliseReputacional): Promise<AnaliseReputacional> {
   const client = clienteAnthropic();
-  return chamarAnalise<AnaliseReputacional>(client, opcoes.documentos, opcoes.fichaResumo, PROMPT_REPUTACIONAL, [
+  const resumo = `Empresa a pesquisar: ${opcoes.empresa}\n\nPessoas físicas/jurídicas relevantes (sócios, administradores) a pesquisar:\n${opcoes.pessoas.map((p) => `- ${p}`).join("\n") || "- (nenhum nome identificado)"}`;
+  return chamarAnalise<AnaliseReputacional>(client, [], resumo, PROMPT_REPUTACIONAL, [
     { type: "web_search_20260318", name: "web_search", max_uses: MAX_BUSCAS_REPUTACIONAL },
   ]);
 }

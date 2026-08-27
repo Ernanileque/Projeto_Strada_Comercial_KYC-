@@ -191,11 +191,8 @@ export async function analisarReputacional(
   validacaoId: string,
 ): Promise<{ sucesso: true; resultado: ResultadoValidador } | { erro: string }> {
   try {
-    const { supabase } = await exigirUsuarioCompliance();
+    await exigirUsuarioCompliance();
     const admin = createAdminClient();
-
-    const dados = await buscarDadosParaAnalise(supabase, credenciamentoId);
-    if ("erro" in dados) return dados;
 
     const { data: registro, error: erroBusca } = await admin
       .from("validacao")
@@ -209,9 +206,14 @@ export async function analisarReputacional(
     const anterior = registro.alertas_json as ResultadoValidador;
     const erros = anterior.erros ? [...anterior.erros] : [];
 
+    // Não precisa reler os documentos — a cadastral/compliance já
+    // extraiu os nomes, que é só o que a reputacional precisa pra
+    // pesquisar. Isso mantém a chamada leve e rápida.
+    const pessoas = (anterior.analiseCompliance?.beneficiarios ?? []).map((b) => b.nome).filter(Boolean);
+
     let reputacional = null;
     try {
-      reputacional = await rodarAnaliseReputacional(dados);
+      reputacional = await rodarAnaliseReputacional({ empresa: anterior.empresa, pessoas });
     } catch (e) {
       erros.push({ codigo: "ANALISE_REPUTACIONAL_FALHOU", mensagem: String(e), etapa: "reputacional" });
     }

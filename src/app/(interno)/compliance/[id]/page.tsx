@@ -7,10 +7,11 @@ import { ValidadorPainel } from "./ValidadorPainel";
 // As Server Actions desta página (analisarCredenciamento,
 // analisarReputacional) herdam o maxDuration da rota que as invoca,
 // não só do arquivo de actions — por isso precisa estar declarado
-// aqui também. A reputacional (busca na web + várias idas e vindas de
-// tool use) já estourou 120s num teste real — 300s dá margem real de
-// verdade em vez de só adiar o mesmo problema.
-export const maxDuration = 300;
+// aqui também. O plano Hobby da Vercel trava em 120s de qualquer
+// jeito (confirmado via log: "Task timed out after 120 seconds"
+// mesmo com maxDuration=300 configurado) — declarar mais que isso não
+// tem efeito, então mantém no teto real da conta.
+export const maxDuration = 120;
 
 const ROTULO_TIPO_DOCUMENTO: Record<string, string> = {
   contrato_social: "Contrato social",
