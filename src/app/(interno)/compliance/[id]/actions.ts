@@ -3,7 +3,13 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { rodarValidadorCadastral, type DocumentoParaAnalise, type ResultadoValidador } from "@/lib/compliance/validador";
+import {
+  rodarAnaliseCadastralCompliance,
+  rodarAnaliseReputacional,
+  montarResultadoValidador,
+  type DocumentoParaAnalise,
+  type ResultadoValidador,
+} from "@/lib/compliance/validador";
 
 const CATEGORIA_POR_TIPO: Record<string, string> = {
   contrato_social: "Contrato social",
@@ -67,6 +73,60 @@ function montarFichaResumo(dados: Record<string, unknown>): string {
   return linhas.join("\n");
 }
 
+async function buscarDadosParaAnalise(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  credenciamentoId: string,
+): Promise<{ documentos: DocumentoParaAnalise[]; fichaResumo: string } | { erro: string }> {
+  const admin = createAdminClient();
+
+  const { data: ficha } = await supabase
+    .from("ficha_kyc")
+    .select("dados_json")
+    .eq("credenciamento_id", credenciamentoId)
+    .maybeSingle();
+
+  const { data: documentosDb } = await supabase
+    .from("documento")
+    .select("tipo, arquivo_url")
+    .eq("credenciamento_id", credenciamentoId);
+
+  if (!documentosDb?.length) {
+    return { erro: "Não há documentos anexados para analisar." };
+  }
+
+  const documentos: DocumentoParaAnalise[] = [];
+  for (const doc of documentosDb) {
+    const mediaType = mediaTypeDoArquivo(doc.arquivo_url);
+    if (!mediaType) continue;
+
+    const { data: arquivo, error: erroDownload } = await admin.storage
+      .from("documentos")
+      .download(doc.arquivo_url);
+    if (erroDownload || !arquivo) continue;
+
+    const buffer = Buffer.from(await arquivo.arrayBuffer());
+    documentos.push({
+      nomeArquivo: doc.arquivo_url.split("/").pop() ?? doc.arquivo_url,
+      categoriaDocumento: CATEGORIA_POR_TIPO[doc.tipo] ?? "Outro",
+      base64: buffer.toString("base64"),
+      mediaType,
+    });
+  }
+
+  if (!documentos.length) {
+    return { erro: "Não foi possível baixar nenhum documento do Storage pra análise." };
+  }
+
+  const fichaResumo = montarFichaResumo((ficha?.dados_json ?? {}) as Record<string, unknown>);
+  return { documentos, fichaResumo };
+}
+
+function resultadoParaEnum(resultado: ResultadoValidador): "APTO" | "NAO_APTO" | "EM_ANALISE" {
+  if (resultado.veredicto.resultado === "APTO") return "APTO";
+  if (resultado.veredicto.resultado === "NÃO APTO") return "NAO_APTO";
+  return "EM_ANALISE";
+}
+
 async function exigirUsuarioCompliance() {
   const supabase = await createClient();
   const {
@@ -84,78 +144,97 @@ async function exigirUsuarioCompliance() {
   return { supabase, userId: user.id };
 }
 
+/**
+ * Roda só cadastral + compliance (rápido, os dois em paralelo) e já
+ * salva o resultado. A reputacional (lenta, busca na web) fica pro
+ * analisarReputacional() de baixo, chamada em paralelo pelo cliente —
+ * assim a tela mostra o resultado cadastral/compliance sem esperar a
+ * parte mais demorada.
+ */
 export async function analisarCredenciamento(
   credenciamentoId: string,
-  incluirReputacional: boolean,
-): Promise<{ sucesso: true; resultado: ResultadoValidador } | { erro: string }> {
+): Promise<{ sucesso: true; validacaoId: string; resultado: ResultadoValidador } | { erro: string }> {
   try {
     const { supabase, userId } = await exigirUsuarioCompliance();
+
+    const dados = await buscarDadosParaAnalise(supabase, credenciamentoId);
+    if ("erro" in dados) return dados;
+
+    const { cadastral, compliance, erros } = await rodarAnaliseCadastralCompliance(dados);
+    const resultado = montarResultadoValidador(cadastral, compliance, null, erros);
+
+    const { data: inserida, error: erroInsert } = await supabase
+      .from("validacao")
+      .insert({
+        credenciamento_id: credenciamentoId,
+        validador: "ia_validador_cadastral",
+        resultado: resultadoParaEnum(resultado),
+        alertas_json: resultado as never,
+        validado_por: userId,
+      })
+      .select("id")
+      .single();
+    if (erroInsert || !inserida) {
+      return { erro: `Análise concluída, mas falhou ao salvar: ${erroInsert?.message ?? "erro desconhecido"}` };
+    }
+
+    revalidatePath(`/compliance/${credenciamentoId}`);
+    return { sucesso: true, validacaoId: inserida.id, resultado };
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "Erro ao rodar a análise." };
+  }
+}
+
+/** Roda a análise reputacional (mais lenta) e atualiza a validacao já salva por analisarCredenciamento. */
+export async function analisarReputacional(
+  credenciamentoId: string,
+  validacaoId: string,
+): Promise<{ sucesso: true; resultado: ResultadoValidador } | { erro: string }> {
+  try {
+    const { supabase } = await exigirUsuarioCompliance();
     const admin = createAdminClient();
 
-    const { data: ficha } = await supabase
-      .from("ficha_kyc")
-      .select("dados_json")
-      .eq("credenciamento_id", credenciamentoId)
-      .maybeSingle();
+    const dados = await buscarDadosParaAnalise(supabase, credenciamentoId);
+    if ("erro" in dados) return dados;
 
-    const { data: documentosDb } = await supabase
-      .from("documento")
-      .select("tipo, arquivo_url")
-      .eq("credenciamento_id", credenciamentoId);
-
-    if (!documentosDb?.length) {
-      return { erro: "Não há documentos anexados para analisar." };
+    const { data: registro, error: erroBusca } = await admin
+      .from("validacao")
+      .select("alertas_json")
+      .eq("id", validacaoId)
+      .single();
+    if (erroBusca || !registro) {
+      return { erro: "Não encontrei a análise original pra anexar o resultado reputacional." };
     }
 
-    const documentos: DocumentoParaAnalise[] = [];
-    for (const doc of documentosDb) {
-      const mediaType = mediaTypeDoArquivo(doc.arquivo_url);
-      if (!mediaType) continue;
+    const anterior = registro.alertas_json as ResultadoValidador;
+    const erros = anterior.erros ? [...anterior.erros] : [];
 
-      const { data: arquivo, error: erroDownload } = await admin.storage
-        .from("documentos")
-        .download(doc.arquivo_url);
-      if (erroDownload || !arquivo) continue;
-
-      const buffer = Buffer.from(await arquivo.arrayBuffer());
-      documentos.push({
-        nomeArquivo: doc.arquivo_url.split("/").pop() ?? doc.arquivo_url,
-        categoriaDocumento: CATEGORIA_POR_TIPO[doc.tipo] ?? "Outro",
-        base64: buffer.toString("base64"),
-        mediaType,
-      });
+    let reputacional = null;
+    try {
+      reputacional = await rodarAnaliseReputacional(dados);
+    } catch (e) {
+      erros.push({ codigo: "ANALISE_REPUTACIONAL_FALHOU", mensagem: String(e), etapa: "reputacional" });
     }
 
-    if (!documentos.length) {
-      return { erro: "Não foi possível baixar nenhum documento do Storage pra análise." };
-    }
+    const resultado = montarResultadoValidador(
+      anterior.analiseCadastral,
+      anterior.analiseCompliance,
+      reputacional,
+      erros,
+    );
 
-    const fichaResumo = montarFichaResumo((ficha?.dados_json ?? {}) as Record<string, unknown>);
-
-    const resultado = await rodarValidadorCadastral({ documentos, fichaResumo, incluirReputacional });
-
-    const resultadoEnum =
-      resultado.veredicto.resultado === "APTO"
-        ? "APTO"
-        : resultado.veredicto.resultado === "NÃO APTO"
-          ? "NAO_APTO"
-          : "EM_ANALISE";
-
-    const { error: erroInsert } = await supabase.from("validacao").insert({
-      credenciamento_id: credenciamentoId,
-      validador: "ia_validador_cadastral",
-      resultado: resultadoEnum,
-      alertas_json: resultado as never,
-      validado_por: userId,
-    });
-    if (erroInsert) {
-      return { erro: `Análise concluída, mas falhou ao salvar: ${erroInsert.message}` };
+    const { error: erroUpdate } = await admin
+      .from("validacao")
+      .update({ resultado: resultadoParaEnum(resultado), alertas_json: resultado as never })
+      .eq("id", validacaoId);
+    if (erroUpdate) {
+      return { erro: `Análise reputacional concluída, mas falhou ao salvar: ${erroUpdate.message}` };
     }
 
     revalidatePath(`/compliance/${credenciamentoId}`);
     return { sucesso: true, resultado };
   } catch (e) {
-    return { erro: e instanceof Error ? e.message : "Erro ao rodar a análise." };
+    return { erro: e instanceof Error ? e.message : "Erro ao rodar a análise reputacional." };
   }
 }
 

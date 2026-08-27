@@ -359,19 +359,26 @@ function contarGravidade(
   return total;
 }
 
-export interface OpcoesValidador {
+export interface OpcoesAnaliseBase {
   documentos: DocumentoParaAnalise[];
   fichaResumo: string;
-  incluirReputacional: boolean;
 }
 
-export async function rodarValidadorCadastral(opcoes: OpcoesValidador): Promise<ResultadoValidador> {
+interface ResultadoCadastralCompliance {
+  cadastral: AnaliseCadastral | null;
+  compliance: AnaliseCompliance | null;
+  erros: ErroValidador[];
+}
+
+/** Cadastral + compliance rodam em paralelo e voltam rápido — a parte lenta é a reputacional (busca na web), por isso ficou separada. */
+export async function rodarAnaliseCadastralCompliance(
+  opcoes: OpcoesAnaliseBase,
+): Promise<ResultadoCadastralCompliance> {
   const client = clienteAnthropic();
   const erros: ErroValidador[] = [];
 
   let cadastral: AnaliseCadastral | null = null;
   let compliance: AnaliseCompliance | null = null;
-  let reputacional: AnaliseReputacional | null = null;
 
   const [resultadoCadastral, resultadoCompliance] = await Promise.allSettled([
     chamarAnalise<AnaliseCadastral>(client, opcoes.documentos, opcoes.fichaResumo, PROMPT_CADASTRAL),
@@ -390,20 +397,26 @@ export async function rodarValidadorCadastral(opcoes: OpcoesValidador): Promise<
     erros.push({ codigo: "ANALISE_COMPLIANCE_FALHOU", mensagem: String(resultadoCompliance.reason), etapa: "compliance" });
   }
 
-  if (opcoes.incluirReputacional) {
-    try {
-      reputacional = await chamarAnalise<AnaliseReputacional>(
-        client,
-        opcoes.documentos,
-        opcoes.fichaResumo,
-        PROMPT_REPUTACIONAL,
-        [{ type: "web_search_20260318", name: "web_search", max_uses: 8 }],
-      );
-    } catch (e) {
-      erros.push({ codigo: "ANALISE_REPUTACIONAL_FALHOU", mensagem: String(e), etapa: "reputacional" });
-    }
-  }
+  return { cadastral, compliance, erros };
+}
 
+// Reduzido de 8 pra 4 buscas — a análise reputacional era a etapa mais
+// lenta do Validador (podia passar de 1-2 minutos sozinha).
+const MAX_BUSCAS_REPUTACIONAL = 4;
+
+export async function rodarAnaliseReputacional(opcoes: OpcoesAnaliseBase): Promise<AnaliseReputacional> {
+  const client = clienteAnthropic();
+  return chamarAnalise<AnaliseReputacional>(client, opcoes.documentos, opcoes.fichaResumo, PROMPT_REPUTACIONAL, [
+    { type: "web_search_20260318", name: "web_search", max_uses: MAX_BUSCAS_REPUTACIONAL },
+  ]);
+}
+
+export function montarResultadoValidador(
+  cadastral: AnaliseCadastral | null,
+  compliance: AnaliseCompliance | null,
+  reputacional: AnaliseReputacional | null,
+  erros: ErroValidador[],
+): ResultadoValidador {
   const empresa = cadastral?.empresa ?? compliance?.empresa ?? "Empresa não identificada";
 
   if (!cadastral || !compliance) {

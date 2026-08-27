@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { analisarCredenciamento, aprovarCredenciamento, negarCredenciamento } from "./actions";
+import { analisarCredenciamento, analisarReputacional, aprovarCredenciamento, negarCredenciamento } from "./actions";
 import type { ResultadoValidador } from "@/lib/compliance/validador";
 
 interface ValidacaoRegistro {
@@ -174,6 +174,7 @@ export function ValidadorPainel({
   );
   const [incluirReputacional, setIncluirReputacional] = useState(false);
   const [analisando, setAnalisando] = useState(false);
+  const [analisandoReputacional, setAnalisandoReputacional] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   const [mostrarNegar, setMostrarNegar] = useState(false);
@@ -185,12 +186,29 @@ export function ValidadorPainel({
     setAnalisando(true);
     setErro(null);
     try {
-      const resposta = await analisarCredenciamento(credenciamentoId, incluirReputacional);
+      const resposta = await analisarCredenciamento(credenciamentoId);
       if ("erro" in resposta) {
         setErro(resposta.erro);
         return;
       }
+      // Cadastral/compliance já aparecem na tela aqui — a reputacional
+      // (mais lenta, busca na web) roda depois, sem travar essa parte.
       setResultado(resposta.resultado);
+      setAnalisando(false);
+
+      if (incluirReputacional) {
+        setAnalisandoReputacional(true);
+        try {
+          const respostaRep = await analisarReputacional(credenciamentoId, resposta.validacaoId);
+          if ("erro" in respostaRep) {
+            setErro(respostaRep.erro);
+          } else {
+            setResultado(respostaRep.resultado);
+          }
+        } finally {
+          setAnalisandoReputacional(false);
+        }
+      }
     } catch {
       // Falha de rede/timeout na chamada da Server Action em si (não um
       // erro tratado dentro dela) — sem isso o botão ficava travado em
@@ -198,6 +216,7 @@ export function ValidadorPainel({
       setErro("A análise demorou demais ou perdeu a conexão. Tente novamente.");
     } finally {
       setAnalisando(false);
+      setAnalisandoReputacional(false);
     }
   }
 
@@ -230,17 +249,17 @@ export function ValidadorPainel({
           <button
             type="button"
             onClick={rodarAnalise}
-            disabled={analisando}
+            disabled={analisando || analisandoReputacional}
             className="rounded bg-strada-laranja px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
           >
-            {analisando ? "Analisando… (pode levar até 2 minutos)" : "Analisar com IA"}
+            {analisando ? "Analisando…" : "Analisar com IA"}
           </button>
           <label className="flex items-center gap-2 text-xs text-strada-cinza">
             <input
               type="checkbox"
               checked={incluirReputacional}
               onChange={(e) => setIncluirReputacional(e.target.checked)}
-              disabled={analisando}
+              disabled={analisando || analisandoReputacional}
             />
             Incluir análise reputacional (busca notícias na web, mais lenta)
           </label>
@@ -254,6 +273,13 @@ export function ValidadorPainel({
           <ResultadoDisplay resultado={resultado} />
         ) : (
           !analisando && <p className="text-sm text-strada-cinza">Nenhuma análise rodada ainda.</p>
+        )}
+
+        {analisandoReputacional && (
+          <p className="flex items-center gap-2 rounded border border-black/10 bg-gray-50 p-3 text-sm text-strada-cinza">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-strada-laranja" />
+            Buscando reputação na web (pode levar até 1 minuto)… o restante da análise já está pronto acima.
+          </p>
         )}
       </Bloco>
 
