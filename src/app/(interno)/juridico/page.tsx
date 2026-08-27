@@ -14,10 +14,17 @@ export default async function JuridicoPage() {
 
   return (
     <div>
-      <h2 className="mb-1 text-lg font-semibold">Jurídico</h2>
-      <p className="mb-4 text-sm text-strada-cinza">
-        Geração de contrato a partir do modelo e assinatura em lote.
-      </p>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h2 className="mb-1 text-lg font-semibold">Jurídico</h2>
+          <p className="text-sm text-strada-cinza">
+            Geração de contrato a partir do modelo e assinatura em lote.
+          </p>
+        </div>
+        <Link href="/juridico/historico" className="text-sm font-medium text-strada-laranja hover:underline">
+          Ver histórico →
+        </Link>
+      </div>
 
       <div className="overflow-x-auto rounded border border-black/10 bg-white">
         <table className="w-full text-sm">
