@@ -10,8 +10,9 @@ import {
   type ResultadoValidador,
 } from "@/lib/compliance/validador";
 import { buscarDadosParaAnalise, resultadoParaEnum } from "@/lib/compliance/coleta";
+import { sanitizarNomeArquivo } from "@/lib/storageNomes";
 
-async function exigirUsuarioCompliance() {
+async function exigirUsuarioComercial() {
   const supabase = await createClient();
   const {
     data: { user },
@@ -29,17 +30,15 @@ async function exigirUsuarioCompliance() {
 }
 
 /**
- * Roda só cadastral + compliance (rápido, os dois em paralelo) e já
- * salva o resultado. A reputacional (lenta, busca na web) fica pro
- * analisarReputacional() de baixo, chamada em paralelo pelo cliente —
- * assim a tela mostra o resultado cadastral/compliance sem esperar a
- * parte mais demorada.
+ * Mesma análise que o Compliance roda, só que chamada uma etapa antes —
+ * o Comercial usa a exata mesma ferramenta (não é uma versão mais barata)
+ * pra triar o cliente antes de escalar ao Compliance.
  */
-export async function analisarCredenciamento(
+export async function rodarAnaliseComercial(
   credenciamentoId: string,
 ): Promise<{ sucesso: true; validacaoId: string; resultado: ResultadoValidador } | { erro: string }> {
   try {
-    const { supabase, userId } = await exigirUsuarioCompliance();
+    const { supabase, userId } = await exigirUsuarioComercial();
 
     const dados = await buscarDadosParaAnalise(supabase, credenciamentoId);
     if ("erro" in dados) return dados;
@@ -51,7 +50,7 @@ export async function analisarCredenciamento(
       .from("validacao")
       .insert({
         credenciamento_id: credenciamentoId,
-        validador: "ia_validador_cadastral",
+        validador: "comercial_pre_analise",
         resultado: resultadoParaEnum(resultado),
         alertas_json: resultado as never,
         validado_por: userId,
@@ -62,20 +61,20 @@ export async function analisarCredenciamento(
       return { erro: `Análise concluída, mas falhou ao salvar: ${erroInsert?.message ?? "erro desconhecido"}` };
     }
 
-    revalidatePath(`/compliance/${credenciamentoId}`);
+    revalidatePath(`/comercial/${credenciamentoId}`);
     return { sucesso: true, validacaoId: inserida.id, resultado };
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "Erro ao rodar a análise." };
   }
 }
 
-/** Roda a análise reputacional (mais lenta) e atualiza a validacao já salva por analisarCredenciamento. */
-export async function analisarReputacional(
+/** Espelha analisarReputacional do Compliance — mesma etapa, chamada pelo Comercial. */
+export async function rodarAnaliseComercialReputacional(
   credenciamentoId: string,
   validacaoId: string,
 ): Promise<{ sucesso: true; resultado: ResultadoValidador } | { erro: string }> {
   try {
-    await exigirUsuarioCompliance();
+    await exigirUsuarioComercial();
     const admin = createAdminClient();
 
     const { data: registro, error: erroBusca } = await admin
@@ -89,10 +88,6 @@ export async function analisarReputacional(
 
     const anterior = registro.alertas_json as ResultadoValidador;
     const erros = anterior.erros ? [...anterior.erros] : [];
-
-    // Não precisa reler os documentos — a cadastral/compliance já
-    // extraiu os nomes, que é só o que a reputacional precisa pra
-    // pesquisar. Isso mantém a chamada leve e rápida.
     const pessoas = (anterior.analiseCompliance?.beneficiarios ?? []).map((b) => b.nome).filter(Boolean);
 
     let reputacional = null;
@@ -117,70 +112,107 @@ export async function analisarReputacional(
       return { erro: `Análise reputacional concluída, mas falhou ao salvar: ${erroUpdate.message}` };
     }
 
-    revalidatePath(`/compliance/${credenciamentoId}`);
+    revalidatePath(`/comercial/${credenciamentoId}`);
     return { sucesso: true, resultado };
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "Erro ao rodar a análise reputacional." };
   }
 }
 
-export async function aprovarCredenciamento(credenciamentoId: string): Promise<{ erro?: string }> {
+export async function encaminharParaCompliance(
+  formData: FormData,
+): Promise<{ erro?: string }> {
   try {
-    const { supabase, userId } = await exigirUsuarioCompliance();
+    const { supabase, userId } = await exigirUsuarioComercial();
 
-    // Registra a decisão do Compliance (mesmo padrão de Devolver/Negar) —
-    // sem isso, o histórico mostrava só o resultado bruto da última análise
-    // de IA, mesmo quando o analista aprovou manualmente por cima dela.
-    const { error: erroValidacao } = await supabase.from("validacao").insert({
+    const credenciamentoId = String(formData.get("credenciamentoId") ?? "");
+    const texto = String(formData.get("texto") ?? "").trim();
+    const arquivo = formData.get("arquivo");
+
+    if (!credenciamentoId) return { erro: "Credenciamento não informado." };
+
+    // Precisa ter rodado a pré-análise do Comercial antes de encaminhar —
+    // é ela que decide se a justificativa é obrigatória ou não.
+    const { data: ultimaAnalise } = await supabase
+      .from("validacao")
+      .select("alertas_json")
+      .eq("credenciamento_id", credenciamentoId)
+      .eq("validador", "comercial_pre_analise")
+      .order("validado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (!ultimaAnalise) {
+      return { erro: "Rode a análise com IA antes de encaminhar ao Compliance." };
+    }
+
+    const resultado = ultimaAnalise.alertas_json as ResultadoValidador;
+    const precisaJustificativa = resultado.veredicto.resultado !== "APTO";
+    if (precisaJustificativa && !texto) {
+      return { erro: "A IA sinalizou atenção — informe a justificativa antes de encaminhar." };
+    }
+
+    let evidenciaUrl: string | null = null;
+    if (arquivo instanceof File && arquivo.size > 0) {
+      const admin = createAdminClient();
+      const caminho = `${credenciamentoId}/justificativa-${Date.now()}-${sanitizarNomeArquivo(arquivo.name)}`;
+      const buffer = Buffer.from(await arquivo.arrayBuffer());
+      const { error: erroUpload } = await admin.storage
+        .from("documentos")
+        .upload(caminho, buffer, { contentType: arquivo.type || undefined });
+      if (erroUpload) return { erro: `Falha ao anexar a evidência: ${erroUpload.message}` };
+      evidenciaUrl = caminho;
+    }
+
+    const { error: erroJustificativa } = await supabase.from("justificativa_comercial").insert({
       credenciamento_id: credenciamentoId,
-      validador: "compliance_aprovacao",
-      resultado: "APTO",
-      alertas_json: {},
-      validado_por: userId,
+      tipo: "encaminhamento",
+      texto: texto || null,
+      evidencia_url: evidenciaUrl,
+      criado_por: userId,
     });
-    if (erroValidacao) return { erro: erroValidacao.message };
+    if (erroJustificativa) return { erro: erroJustificativa.message };
 
-    const { error } = await supabase
+    const { error: erroStatus } = await supabase
       .from("credenciamento")
-      .update({ status: "VALIDADO" })
+      .update({ status: "EM_ANALISE", entrou_em_analise_em: new Date().toISOString() })
       .eq("id", credenciamentoId);
-    if (error) return { erro: error.message };
-    revalidatePath(`/compliance/${credenciamentoId}`);
+    if (erroStatus) return { erro: erroStatus.message };
+
+    revalidatePath(`/comercial/${credenciamentoId}`);
+    revalidatePath("/comercial");
     revalidatePath("/compliance");
     return {};
   } catch (e) {
-    return { erro: e instanceof Error ? e.message : "Erro ao aprovar." };
+    return { erro: e instanceof Error ? e.message : "Erro ao encaminhar ao Compliance." };
   }
 }
 
-export async function negarCredenciamento(
+export async function devolverAoCliente(
   credenciamentoId: string,
   motivo: string,
 ): Promise<{ erro?: string }> {
   try {
-    const { supabase, userId } = await exigirUsuarioCompliance();
+    const { supabase, userId } = await exigirUsuarioComercial();
 
-    if (!motivo.trim()) return { erro: "Informe o motivo da negativa." };
-
-    const { error: erroValidacao } = await supabase.from("validacao").insert({
+    const { error: erroJustificativa } = await supabase.from("justificativa_comercial").insert({
       credenciamento_id: credenciamentoId,
-      validador: "compliance_negacao",
-      resultado: "NAO_APTO",
-      alertas_json: { motivo } as never,
-      validado_por: userId,
+      tipo: "devolucao_cliente",
+      texto: motivo || null,
+      criado_por: userId,
     });
-    if (erroValidacao) return { erro: erroValidacao.message };
+    if (erroJustificativa) return { erro: erroJustificativa.message };
 
     const { error: erroStatus } = await supabase
       .from("credenciamento")
-      .update({ status: "REPROVADO" })
+      .update({ status: "DEVOLVIDO" })
       .eq("id", credenciamentoId);
     if (erroStatus) return { erro: erroStatus.message };
 
-    revalidatePath(`/compliance/${credenciamentoId}`);
-    revalidatePath("/compliance");
+    revalidatePath(`/comercial/${credenciamentoId}`);
+    revalidatePath("/comercial");
     return {};
   } catch (e) {
-    return { erro: e instanceof Error ? e.message : "Erro ao negar o credenciamento." };
+    return { erro: e instanceof Error ? e.message : "Erro ao devolver ao cliente." };
   }
 }

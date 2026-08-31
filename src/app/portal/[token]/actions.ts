@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { montarFichaHtml, converterHtmlParaPdf } from "@/lib/compliance/fichaPdf";
+import { sanitizarNomeArquivo } from "@/lib/storageNomes";
 
 type ResultadoEnvio = { erro: string } | { sucesso: true };
 
@@ -40,18 +41,6 @@ interface DadosFichaEnviados {
 }
 
 type ResultadoUpload = { caminho: string; signedToken: string } | { erro: string };
-
-/**
- * Remove acentos e troca qualquer caractere fora de [a-zA-Z0-9._-] por "_".
- * Nomes de documentos reais costumam ter "°", "Ã", espaços etc., que o
- * Storage rejeita na chave do objeto ("Invalid key").
- */
-function sanitizarNomeArquivo(nomeArquivo: string): string {
-  return nomeArquivo
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-zA-Z0-9._-]/g, "_");
-}
 
 /**
  * Gera uma URL assinada de upload direto pro Storage (o navegador manda o
@@ -245,9 +234,13 @@ export async function enviarFichaKyc(
       console.error("Falha ao gerar PDF da ficha KYC:", e);
     }
 
+    // Antes ia direto pro Compliance (EM_ANALISE). Agora passa primeiro
+    // pelo Comercial, que roda o mesmo Validador IA e decide encaminhar
+    // ou devolver ao cliente — reduz o volume de análises que chegam
+    // ao Compliance sem triagem prévia.
     const { error: erroStatus } = await admin
       .from("credenciamento")
-      .update({ status: "EM_ANALISE", entrou_em_analise_em: new Date().toISOString() })
+      .update({ status: "EM_VALIDACAO_COMERCIAL", entrou_em_analise_em: new Date().toISOString() })
       .eq("id", credenciamentoId);
     if (erroStatus) throw new Error(erroStatus.message);
 

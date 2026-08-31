@@ -64,15 +64,18 @@ export default async function PortalClientePage({
 
   let motivoDevolucao: string | undefined;
   if (credenciamento.status === "DEVOLVIDO") {
-    const { data: ultimaValidacao } = await admin
-      .from("validacao")
-      .select("alertas_json")
+    // Devolução ao cliente é sempre decisão do Comercial (etapa de
+    // validação comercial) — o motivo fica em justificativa_comercial,
+    // não em validacao.
+    const { data: ultimaDevolucao } = await admin
+      .from("justificativa_comercial")
+      .select("texto")
       .eq("credenciamento_id", credenciamento.id)
-      .order("validado_em", { ascending: false })
+      .eq("tipo", "devolucao_cliente")
+      .order("criado_em", { ascending: false })
       .limit(1)
       .maybeSingle();
-    const alertas = ultimaValidacao?.alertas_json as { motivo?: string } | null;
-    motivoDevolucao = alertas?.motivo;
+    motivoDevolucao = ultimaDevolucao?.texto ?? undefined;
   }
 
   return (

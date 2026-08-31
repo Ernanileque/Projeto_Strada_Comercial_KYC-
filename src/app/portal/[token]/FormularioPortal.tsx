@@ -1076,7 +1076,7 @@ export function FormularioPortal({
               ? "Aguarde o envio dos arquivos ou remova os que falharam"
               : conferencia.erros.length > 0
                 ? "Corrija os erros da conferência automática para enviar"
-                : "Enviar ao Compliance"}
+                : "Enviar para análise"}
         </button>
       </form>
     </div>

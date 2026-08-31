@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { analisarCredenciamento, analisarReputacional, aprovarCredenciamento, negarCredenciamento } from "./actions";
+import {
+  rodarAnaliseComercial,
+  rodarAnaliseComercialReputacional,
+  encaminharParaCompliance,
+  devolverAoCliente,
+} from "./actions";
 import type { ResultadoValidador } from "@/lib/compliance/validador";
 import { ResultadoValidadorDisplay } from "@/components/ResultadoValidadorDisplay";
 
@@ -24,7 +29,7 @@ function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode
   );
 }
 
-export function ValidadorPainel({
+export function ValidadorComercialPainel({
   credenciamentoId,
   status,
   validacoesIniciais,
@@ -33,7 +38,7 @@ export function ValidadorPainel({
   status: string;
   validacoesIniciais: ValidacaoRegistro[];
 }) {
-  const registroInicial = validacoesIniciais.find((v) => v.validador === "ia_validador_cadastral");
+  const registroInicial = validacoesIniciais.find((v) => v.validador === "comercial_pre_analise");
 
   const [resultado, setResultado] = useState<ResultadoValidador | null>(
     (registroInicial?.alertas_json as ResultadoValidador) ?? null,
@@ -43,29 +48,31 @@ export function ValidadorPainel({
   const [analisandoReputacional, setAnalisandoReputacional] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  const [mostrarNegar, setMostrarNegar] = useState(false);
-  const [motivoNegativa, setMotivoNegativa] = useState("");
+  const [justificativa, setJustificativa] = useState("");
+  const [arquivoEvidencia, setArquivoEvidencia] = useState<File | null>(null);
+  const [mostrarDevolver, setMostrarDevolver] = useState(false);
+  const [motivoDevolucao, setMotivoDevolucao] = useState("");
   const [enviandoDecisao, setEnviandoDecisao] = useState(false);
   const [decisaoTomada, setDecisaoTomada] = useState(false);
+
+  const precisaJustificativa = resultado ? resultado.veredicto.resultado !== "APTO" : false;
 
   async function rodarAnalise() {
     setAnalisando(true);
     setErro(null);
     try {
-      const resposta = await analisarCredenciamento(credenciamentoId);
+      const resposta = await rodarAnaliseComercial(credenciamentoId);
       if ("erro" in resposta) {
         setErro(resposta.erro);
         return;
       }
-      // Cadastral/compliance já aparecem na tela aqui — a reputacional
-      // (mais lenta, busca na web) roda depois, sem travar essa parte.
       setResultado(resposta.resultado);
       setAnalisando(false);
 
       if (incluirReputacional) {
         setAnalisandoReputacional(true);
         try {
-          const respostaRep = await analisarReputacional(credenciamentoId, resposta.validacaoId);
+          const respostaRep = await rodarAnaliseComercialReputacional(credenciamentoId, resposta.validacaoId);
           if ("erro" in respostaRep) {
             setErro(respostaRep.erro);
           } else {
@@ -76,9 +83,6 @@ export function ValidadorPainel({
         }
       }
     } catch {
-      // Falha de rede/timeout na chamada da Server Action em si (não um
-      // erro tratado dentro dela) — sem isso o botão ficava travado em
-      // "Analisando..." pra sempre, sem nunca mostrar erro.
       setErro("A análise demorou demais ou perdeu a conexão. Tente novamente.");
     } finally {
       setAnalisando(false);
@@ -86,9 +90,14 @@ export function ValidadorPainel({
     }
   }
 
-  async function aprovar() {
+  async function encaminhar() {
     setEnviandoDecisao(true);
-    const resposta = await aprovarCredenciamento(credenciamentoId);
+    setErro(null);
+    const fd = new FormData();
+    fd.append("credenciamentoId", credenciamentoId);
+    fd.append("texto", justificativa);
+    if (arquivoEvidencia) fd.append("arquivo", arquivoEvidencia);
+    const resposta = await encaminharParaCompliance(fd);
     setEnviandoDecisao(false);
     if (resposta.erro) {
       setErro(resposta.erro);
@@ -97,9 +106,10 @@ export function ValidadorPainel({
     setDecisaoTomada(true);
   }
 
-  async function confirmarNegativa() {
+  async function confirmarDevolucao() {
     setEnviandoDecisao(true);
-    const resposta = await negarCredenciamento(credenciamentoId, motivoNegativa);
+    setErro(null);
+    const resposta = await devolverAoCliente(credenciamentoId, motivoDevolucao);
     setEnviandoDecisao(false);
     if (resposta.erro) {
       setErro(resposta.erro);
@@ -149,43 +159,82 @@ export function ValidadorPainel({
         )}
       </Bloco>
 
-      {status === "EM_ANALISE" && !decisaoTomada && (
-        <Bloco titulo="Decisão do Compliance">
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={aprovar}
-              disabled={enviandoDecisao}
-              className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-            >
-              Aprovar (enviar ao Jurídico)
-            </button>
-            <button
-              type="button"
-              onClick={() => setMostrarNegar(true)}
-              disabled={enviandoDecisao}
-              className="rounded border border-red-700 px-4 py-2 text-sm font-medium text-red-700 disabled:opacity-60"
-            >
-              Negar (devolver ao Comercial)
-            </button>
-          </div>
-          {mostrarNegar && (
-            <div className="space-y-2 border-t border-black/5 pt-3">
+      {status === "EM_VALIDACAO_COMERCIAL" && !decisaoTomada && (
+        <Bloco titulo="Decisão do Comercial">
+          {!mostrarDevolver && (
+            <div className="space-y-2">
+              <label className="block text-xs font-medium text-strada-cinza">
+                Justificativa pro Compliance
+                {precisaJustificativa ? (
+                  <span className="text-red-700"> (obrigatória — a IA sinalizou atenção)</span>
+                ) : (
+                  " (opcional)"
+                )}
+              </label>
               <textarea
-                value={motivoNegativa}
-                onChange={(e) => setMotivoNegativa(e.target.value)}
-                rows={2}
-                placeholder="Motivo da negativa (o Comercial vai ver isso, o cliente não)"
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+                rows={3}
+                placeholder="Explique o que foi verificado e por que pode seguir para o Compliance"
                 className="w-full rounded border border-black/10 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none"
               />
-              <button
-                type="button"
-                onClick={confirmarNegativa}
-                disabled={enviandoDecisao}
-                className="rounded bg-red-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-              >
-                Confirmar negativa
-              </button>
+              <label className="block text-xs font-medium text-strada-cinza">
+                Anexar evidência de contestação (opcional)
+              </label>
+              <input
+                type="file"
+                onChange={(e) => setArquivoEvidencia(e.target.files?.[0] ?? null)}
+                className="block w-full text-sm"
+              />
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-3 border-t border-black/5 pt-3">
+            <button
+              type="button"
+              onClick={encaminhar}
+              disabled={enviandoDecisao || mostrarDevolver}
+              className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+            >
+              Encaminhar ao Compliance
+            </button>
+            <button
+              type="button"
+              onClick={() => setMostrarDevolver(true)}
+              disabled={enviandoDecisao || mostrarDevolver}
+              className="rounded border border-strada-vinho px-4 py-2 text-sm font-medium text-strada-vinho disabled:opacity-60"
+            >
+              Devolver ao cliente
+            </button>
+          </div>
+
+          {mostrarDevolver && (
+            <div className="space-y-2 border-t border-black/5 pt-3">
+              <textarea
+                value={motivoDevolucao}
+                onChange={(e) => setMotivoDevolucao(e.target.value)}
+                rows={2}
+                placeholder="O que o cliente precisa corrigir/reenviar (opcional)"
+                className="w-full rounded border border-black/10 px-3 py-2 text-sm focus:border-strada-laranja focus:outline-none"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={confirmarDevolucao}
+                  disabled={enviandoDecisao}
+                  className="rounded bg-strada-vinho px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  Confirmar devolução
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMostrarDevolver(false)}
+                  disabled={enviandoDecisao}
+                  className="rounded px-4 py-2 text-sm font-medium text-strada-cinza"
+                >
+                  Cancelar
+                </button>
+              </div>
             </div>
           )}
         </Bloco>
