@@ -54,6 +54,7 @@ export default async function CredenciamentoJuridicoPage({
 
       <ContratoPainel
         credenciamentoId={credenciamento.id}
+        status={credenciamento.status}
         produto={credenciamento.produto as ProdutoCredenciamento}
         contratos={contratos ?? []}
         assinaturas={assinaturas ?? []}

@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { gerarContrato, obterLinkContrato, marcarEnviadoParaAssinatura, marcarAssinaturaIndividual } from "./actions";
+import {
+  gerarContrato,
+  obterLinkContrato,
+  marcarEnviadoParaAssinatura,
+  marcarAssinaturaIndividual,
+  enviarParaImplantacao,
+} from "./actions";
 import { PRODUTO_LABEL, type ProdutoCredenciamento } from "@/lib/estados";
 import type { ProdutoContrato } from "@/lib/juridico/contrato";
 
@@ -201,17 +207,39 @@ function BlocoProduto({
 
 export function ContratoPainel({
   credenciamentoId,
+  status,
   produto,
   contratos,
   assinaturas,
 }: {
   credenciamentoId: string;
+  status: string;
   produto: ProdutoCredenciamento;
   contratos: ContratoRegistro[];
   assinaturas: AssinaturaRegistro[];
 }) {
+  const [enviando, setEnviando] = useState(false);
+  const [erroEnvio, setErroEnvio] = useState<string | null>(null);
+  const [enviado, setEnviado] = useState(false);
+
   const produtosParaGerar: ProdutoContrato[] =
     produto === "AMBOS" ? ["STRADA_PAY", "STRADA_LOG"] : [produto];
+
+  const todosContratosGerados = produtosParaGerar.every((p) => contratos.some((c) => c.produto === p));
+  const todosContratosAssinados =
+    todosContratosGerados && produtosParaGerar.every((p) => contratos.find((c) => c.produto === p)?.status === "ASSINADO");
+
+  async function enviar() {
+    setEnviando(true);
+    setErroEnvio(null);
+    const resposta = await enviarParaImplantacao(credenciamentoId);
+    setEnviando(false);
+    if (resposta.erro) {
+      setErroEnvio(resposta.erro);
+      return;
+    }
+    setEnviado(true);
+  }
 
   return (
     <section className="space-y-3 rounded border border-black/10 bg-gray-50 p-4">
@@ -230,6 +258,29 @@ export function ContratoPainel({
           />
         );
       })}
+
+      {todosContratosAssinados && status === "AGUARDANDO_ASSINATURA" && !enviado && (
+        <div className="rounded border border-emerald-200 bg-emerald-50 p-3">
+          <p className="mb-2 text-sm text-emerald-900">
+            Todos os contratos estão assinados. Confira a lista de assinantes acima antes de encaminhar.
+          </p>
+          <button
+            type="button"
+            onClick={enviar}
+            disabled={enviando}
+            className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {enviando ? "Enviando…" : "Enviar para Implantação"}
+          </button>
+          {erroEnvio && <p className="mt-2 text-xs text-red-800">{erroEnvio}</p>}
+        </div>
+      )}
+
+      {enviado && (
+        <p className="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          Encaminhado para Implantação.
+        </p>
+      )}
     </section>
   );
 }

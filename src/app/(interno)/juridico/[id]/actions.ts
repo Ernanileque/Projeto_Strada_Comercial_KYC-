@@ -238,10 +238,11 @@ export async function marcarEnviadoParaAssinatura(
 /**
  * Marca uma pessoa específica como tendo assinado. Quando todos os
  * assinantes daquele contrato já assinaram, o contrato inteiro vira
- * ASSINADO sozinho — e se todos os contratos do credenciamento
- * estiverem assinados, o credenciamento também vira ASSINADO (mesma
- * lógica em cascata de antes, só que agora disparada pelo último
- * assinante em vez de um botão único por contrato).
+ * ASSINADO sozinho. O credenciamento NÃO muda de status aqui —
+ * mesmo com todos os contratos assinados, o Jurídico precisa
+ * conferir e clicar em "Enviar para Implantação" (enviarParaImplantacao)
+ * pra de fato encaminhar. Isso evita que o handoff pra outra área
+ * aconteça sem revisão, só porque o último assinante confirmou.
  */
 export async function marcarAssinaturaIndividual(
   assinaturaId: string,
@@ -270,21 +271,6 @@ export async function marcarAssinaturaIndividual(
         .update({ status: "ASSINADO", assinado_em: new Date().toISOString() })
         .eq("id", contratoId);
       if (erroContrato) return { erro: erroContrato.message };
-
-      const { data: contratos } = await supabase
-        .from("contrato")
-        .select("status")
-        .eq("credenciamento_id", credenciamentoId);
-
-      const todosContratosAssinados = (contratos ?? []).every((c) => c.status === "ASSINADO");
-
-      if (todosContratosAssinados) {
-        const { error: erroStatus } = await supabase
-          .from("credenciamento")
-          .update({ status: "ASSINADO" })
-          .eq("id", credenciamentoId);
-        if (erroStatus) return { erro: erroStatus.message };
-      }
     }
 
     revalidatePath(`/juridico/${credenciamentoId}`);
@@ -292,5 +278,40 @@ export async function marcarAssinaturaIndividual(
     return {};
   } catch (e) {
     return { erro: e instanceof Error ? e.message : "Erro ao marcar assinatura." };
+  }
+}
+
+/**
+ * Handoff explícito pra Implantação — o Jurídico confere que todos os
+ * contratos do credenciamento já estão assinados e clica pra
+ * encaminhar. Reconfere no servidor (não confia só na tela) antes de
+ * mudar o status do credenciamento.
+ */
+export async function enviarParaImplantacao(credenciamentoId: string): Promise<{ erro?: string }> {
+  try {
+    const { supabase } = await exigirUsuarioJuridico();
+
+    const { data: contratos } = await supabase
+      .from("contrato")
+      .select("status")
+      .eq("credenciamento_id", credenciamentoId);
+
+    const todosAssinados = !!contratos?.length && contratos.every((c) => c.status === "ASSINADO");
+    if (!todosAssinados) {
+      return { erro: "Ainda há contrato pendente de assinatura — confira a lista de assinantes." };
+    }
+
+    const { error } = await supabase
+      .from("credenciamento")
+      .update({ status: "ASSINADO" })
+      .eq("id", credenciamentoId);
+    if (error) return { erro: error.message };
+
+    revalidatePath(`/juridico/${credenciamentoId}`);
+    revalidatePath("/juridico");
+    revalidatePath("/implantacao");
+    return {};
+  } catch (e) {
+    return { erro: e instanceof Error ? e.message : "Erro ao enviar para implantação." };
   }
 }
