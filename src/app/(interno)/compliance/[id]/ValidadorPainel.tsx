@@ -33,11 +33,18 @@ export function ValidadorPainel({
   status: string;
   validacoesIniciais: ValidacaoRegistro[];
 }) {
-  const registroInicial = validacoesIniciais.find((v) => v.validador === "ia_validador_cadastral");
+  // validacoesIniciais já vem ordenado por validado_em desc — pega a
+  // análise de IA mais recente, seja ela do Comercial (pré-análise) ou
+  // uma rodada aqui mesmo pelo Compliance. Evita rodar de novo (e pagar
+  // de novo) uma análise que o Comercial já fez.
+  const registroInicial = validacoesIniciais.find(
+    (v) => v.validador === "ia_validador_cadastral" || v.validador === "comercial_pre_analise",
+  );
 
   const [resultado, setResultado] = useState<ResultadoValidador | null>(
     (registroInicial?.alertas_json as ResultadoValidador) ?? null,
   );
+  const [origemResultado, setOrigemResultado] = useState<string | null>(registroInicial?.validador ?? null);
   const [incluirReputacional, setIncluirReputacional] = useState(false);
   const [analisando, setAnalisando] = useState(false);
   const [analisandoReputacional, setAnalisandoReputacional] = useState(false);
@@ -60,6 +67,7 @@ export function ValidadorPainel({
       // Cadastral/compliance já aparecem na tela aqui — a reputacional
       // (mais lenta, busca na web) roda depois, sem travar essa parte.
       setResultado(resposta.resultado);
+      setOrigemResultado("ia_validador_cadastral");
       setAnalisando(false);
 
       if (incluirReputacional) {
@@ -136,7 +144,15 @@ export function ValidadorPainel({
         )}
 
         {resultado ? (
-          <ResultadoValidadorDisplay resultado={resultado} />
+          <>
+            {origemResultado === "comercial_pre_analise" && (
+              <p className="rounded border border-sky-200 bg-sky-50 p-2 text-xs text-sky-800">
+                Análise já rodada pelo Comercial antes de encaminhar — não precisa rodar de novo, a menos que
+                queira uma segunda opinião.
+              </p>
+            )}
+            <ResultadoValidadorDisplay resultado={resultado} />
+          </>
         ) : (
           !analisando && <p className="text-sm text-strada-cinza">Nenhuma análise rodada ainda.</p>
         )}

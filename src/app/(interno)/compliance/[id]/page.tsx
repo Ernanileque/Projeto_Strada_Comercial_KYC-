@@ -101,25 +101,39 @@ export default async function CredenciamentoCompliancePage({
 
   if (!credenciamento) notFound();
 
-  const [{ data: ficha }, { data: documentos }, { data: socios }, { data: testemunha }, { data: validacoes }] =
-    await Promise.all([
-      supabase.from("ficha_kyc").select("dados_json").eq("credenciamento_id", id).maybeSingle(),
-      supabase
-        .from("documento")
-        .select("id, tipo, arquivo_url, enviado_em")
-        .eq("credenciamento_id", id)
-        .order("enviado_em"),
-      supabase
-        .from("socio")
-        .select("id, nome, cpf, participacao, pep_flag, email")
-        .eq("credenciamento_id", id),
-      supabase.from("testemunha").select("nome, cpf, email").eq("credenciamento_id", id).maybeSingle(),
-      supabase
-        .from("validacao")
-        .select("id, validador, resultado, alertas_json, validado_em")
-        .eq("credenciamento_id", id)
-        .order("validado_em", { ascending: false }),
-    ]);
+  const [
+    { data: ficha },
+    { data: documentos },
+    { data: socios },
+    { data: testemunha },
+    { data: validacoes },
+    { data: justificativaComercial },
+  ] = await Promise.all([
+    supabase.from("ficha_kyc").select("dados_json").eq("credenciamento_id", id).maybeSingle(),
+    supabase
+      .from("documento")
+      .select("id, tipo, arquivo_url, enviado_em")
+      .eq("credenciamento_id", id)
+      .order("enviado_em"),
+    supabase
+      .from("socio")
+      .select("id, nome, cpf, participacao, pep_flag, email")
+      .eq("credenciamento_id", id),
+    supabase.from("testemunha").select("nome, cpf, email").eq("credenciamento_id", id).maybeSingle(),
+    supabase
+      .from("validacao")
+      .select("id, validador, resultado, alertas_json, validado_em")
+      .eq("credenciamento_id", id)
+      .order("validado_em", { ascending: false }),
+    supabase
+      .from("justificativa_comercial")
+      .select("texto, evidencia_url, criado_em")
+      .eq("credenciamento_id", id)
+      .eq("tipo", "encaminhamento")
+      .order("criado_em", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   const cliente = credenciamento.cliente as unknown as {
     razao_social: string;
@@ -146,6 +160,22 @@ export default async function CredenciamentoCompliancePage({
         </div>
         <StatusBadge status={credenciamento.status} />
       </div>
+
+      {justificativaComercial && (justificativaComercial.texto || justificativaComercial.evidencia_url) && (
+        <div className="rounded border border-sky-200 bg-sky-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-sky-800">
+            Justificativa do Comercial ao encaminhar
+          </p>
+          {justificativaComercial.texto && (
+            <p className="mt-1 whitespace-pre-wrap text-sm text-sky-900">{justificativaComercial.texto}</p>
+          )}
+          {justificativaComercial.evidencia_url && (
+            <div className="mt-2">
+              <VerDocumentoBotao caminho={justificativaComercial.evidencia_url} />
+            </div>
+          )}
+        </div>
+      )}
 
       <Bloco titulo="Dados da empresa">
         <dl className="grid grid-cols-3 gap-3">
