@@ -27,6 +27,11 @@ export default async function CredenciamentoJuridicoPage({
     .select("id, produto, arquivo_url, status, gerado_em, assinado_em")
     .eq("credenciamento_id", id);
 
+  const { data: assinaturas } = await supabase
+    .from("assinatura")
+    .select("id, contrato_id, papel, nome, assinado_em")
+    .in("contrato_id", (contratos ?? []).map((c) => c.id));
+
   const cliente = credenciamento.cliente as unknown as {
     razao_social: string;
     cnpj: string;
@@ -51,6 +56,7 @@ export default async function CredenciamentoJuridicoPage({
         credenciamentoId={credenciamento.id}
         produto={credenciamento.produto as ProdutoCredenciamento}
         contratos={contratos ?? []}
+        assinaturas={assinaturas ?? []}
       />
 
       <section className="overflow-hidden rounded border border-black/10 bg-white">

@@ -6,6 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   gerarContratoDocx,
   formatarEnderecoCompleto,
+  SIGNATARIO_DESIGNADO_STRADA,
+  TESTEMUNHA_FIXA_STRADA,
   type ProdutoContrato,
 } from "@/lib/juridico/contrato";
 
@@ -38,6 +40,67 @@ async function exigirUsuarioJuridico() {
   return { supabase, userId: user.id };
 }
 
+interface TestemunhaRegistro {
+  nome: string;
+  cpf: string | null;
+  email: string;
+}
+
+/**
+ * Recria do zero (delete + insert) o conjunto de assinantes daquele
+ * contrato — chamado toda vez que o contrato é gerado/regenerado, pra
+ * manter a lista sempre consistente com os dados mais recentes da
+ * ficha KYC/testemunha.
+ */
+async function recriarAssinaturas(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  contratoId: string,
+  assinantes: Assinante[],
+  testemunhaCliente: TestemunhaRegistro | null,
+): Promise<{ erro?: string }> {
+  const { error: erroLimpa } = await supabase.from("assinatura").delete().eq("contrato_id", contratoId);
+  if (erroLimpa) return { erro: erroLimpa.message };
+
+  const linhas = [
+    {
+      contrato_id: contratoId,
+      papel: "strada_signatario",
+      nome: SIGNATARIO_DESIGNADO_STRADA.nome,
+      email: SIGNATARIO_DESIGNADO_STRADA.email,
+    },
+    {
+      contrato_id: contratoId,
+      papel: "strada_testemunha",
+      nome: TESTEMUNHA_FIXA_STRADA.nome,
+      email: TESTEMUNHA_FIXA_STRADA.email,
+    },
+    ...assinantes
+      .filter((a) => a.nome?.trim())
+      .map((a) => ({
+        contrato_id: contratoId,
+        papel: "cliente_signatario" as const,
+        nome: a.nome,
+        cpf: a.cpf || null,
+        email: a.email || null,
+      })),
+    ...(testemunhaCliente
+      ? [
+          {
+            contrato_id: contratoId,
+            papel: "cliente_testemunha" as const,
+            nome: testemunhaCliente.nome,
+            cpf: testemunhaCliente.cpf,
+            email: testemunhaCliente.email,
+          },
+        ]
+      : []),
+  ];
+
+  const { error: erroInsert } = await supabase.from("assinatura").insert(linhas);
+  if (erroInsert) return { erro: erroInsert.message };
+  return {};
+}
+
 export async function gerarContrato(
   credenciamentoId: string,
   produto: ProdutoContrato,
@@ -53,11 +116,10 @@ export async function gerarContrato(
       .single();
     if (!credenciamento) return { erro: "Credenciamento não encontrado." };
 
-    const { data: ficha } = await supabase
-      .from("ficha_kyc")
-      .select("dados_json")
-      .eq("credenciamento_id", credenciamentoId)
-      .maybeSingle();
+    const [{ data: ficha }, { data: testemunhaCliente }] = await Promise.all([
+      supabase.from("ficha_kyc").select("dados_json").eq("credenciamento_id", credenciamentoId).maybeSingle(),
+      supabase.from("testemunha").select("nome, cpf, email").eq("credenciamento_id", credenciamentoId).maybeSingle(),
+    ]);
 
     const cliente = credenciamento.cliente as unknown as { razao_social: string; cnpj: string };
     const dados = (ficha?.dados_json ?? {}) as Record<string, unknown>;
@@ -92,21 +154,33 @@ export async function gerarContrato(
       .eq("produto", produto)
       .maybeSingle();
 
+    let contratoId: string;
     if (contratoExistente) {
       const { error: erroUpdate } = await supabase
         .from("contrato")
         .update({ arquivo_url: caminho, gerado_em: new Date().toISOString(), status: "RASCUNHO" })
         .eq("id", contratoExistente.id);
       if (erroUpdate) return { erro: erroUpdate.message };
+      contratoId = contratoExistente.id;
     } else {
-      const { error: erroInsert } = await supabase.from("contrato").insert({
-        credenciamento_id: credenciamentoId,
-        produto,
-        arquivo_url: caminho,
-        gerado_em: new Date().toISOString(),
-        status: "RASCUNHO",
-      });
-      if (erroInsert) return { erro: erroInsert.message };
+      const { data: contratoInserido, error: erroInsert } = await supabase
+        .from("contrato")
+        .insert({
+          credenciamento_id: credenciamentoId,
+          produto,
+          arquivo_url: caminho,
+          gerado_em: new Date().toISOString(),
+          status: "RASCUNHO",
+        })
+        .select("id")
+        .single();
+      if (erroInsert || !contratoInserido) return { erro: erroInsert?.message ?? "Falha ao criar o contrato." };
+      contratoId = contratoInserido.id;
+    }
+
+    const resultadoAssinaturas = await recriarAssinaturas(supabase, contratoId, assinantes, testemunhaCliente);
+    if (resultadoAssinaturas.erro) {
+      return { erro: `Contrato gerado, mas falhou ao montar a lista de assinantes: ${resultadoAssinaturas.erro}` };
     }
 
     if (credenciamento.status === "VALIDADO") {
@@ -161,38 +235,62 @@ export async function marcarEnviadoParaAssinatura(
   }
 }
 
-export async function marcarAssinado(
+/**
+ * Marca uma pessoa específica como tendo assinado. Quando todos os
+ * assinantes daquele contrato já assinaram, o contrato inteiro vira
+ * ASSINADO sozinho — e se todos os contratos do credenciamento
+ * estiverem assinados, o credenciamento também vira ASSINADO (mesma
+ * lógica em cascata de antes, só que agora disparada pelo último
+ * assinante em vez de um botão único por contrato).
+ */
+export async function marcarAssinaturaIndividual(
+  assinaturaId: string,
   contratoId: string,
   credenciamentoId: string,
 ): Promise<{ erro?: string }> {
   try {
     const { supabase } = await exigirUsuarioJuridico();
 
-    const { error: erroContrato } = await supabase
-      .from("contrato")
-      .update({ status: "ASSINADO", assinado_em: new Date().toISOString() })
-      .eq("id", contratoId);
-    if (erroContrato) return { erro: erroContrato.message };
+    const { error: erroAssinatura } = await supabase
+      .from("assinatura")
+      .update({ assinado_em: new Date().toISOString() })
+      .eq("id", assinaturaId);
+    if (erroAssinatura) return { erro: erroAssinatura.message };
 
-    const { data: contratos } = await supabase
-      .from("contrato")
-      .select("status")
-      .eq("credenciamento_id", credenciamentoId);
+    const { data: assinaturasDoContrato } = await supabase
+      .from("assinatura")
+      .select("assinado_em")
+      .eq("contrato_id", contratoId);
 
-    const todosAssinados = (contratos ?? []).every((c) => c.status === "ASSINADO");
+    const todosAssinaram = (assinaturasDoContrato ?? []).every((a) => a.assinado_em !== null);
 
-    if (todosAssinados) {
-      const { error: erroStatus } = await supabase
-        .from("credenciamento")
-        .update({ status: "ASSINADO" })
-        .eq("id", credenciamentoId);
-      if (erroStatus) return { erro: erroStatus.message };
+    if (todosAssinaram) {
+      const { error: erroContrato } = await supabase
+        .from("contrato")
+        .update({ status: "ASSINADO", assinado_em: new Date().toISOString() })
+        .eq("id", contratoId);
+      if (erroContrato) return { erro: erroContrato.message };
+
+      const { data: contratos } = await supabase
+        .from("contrato")
+        .select("status")
+        .eq("credenciamento_id", credenciamentoId);
+
+      const todosContratosAssinados = (contratos ?? []).every((c) => c.status === "ASSINADO");
+
+      if (todosContratosAssinados) {
+        const { error: erroStatus } = await supabase
+          .from("credenciamento")
+          .update({ status: "ASSINADO" })
+          .eq("id", credenciamentoId);
+        if (erroStatus) return { erro: erroStatus.message };
+      }
     }
 
     revalidatePath(`/juridico/${credenciamentoId}`);
     revalidatePath("/juridico");
     return {};
   } catch (e) {
-    return { erro: e instanceof Error ? e.message : "Erro ao marcar como assinado." };
+    return { erro: e instanceof Error ? e.message : "Erro ao marcar assinatura." };
   }
 }

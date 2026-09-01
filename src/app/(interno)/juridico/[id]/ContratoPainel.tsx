@@ -1,12 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  gerarContrato,
-  obterLinkContrato,
-  marcarEnviadoParaAssinatura,
-  marcarAssinado,
-} from "./actions";
+import { gerarContrato, obterLinkContrato, marcarEnviadoParaAssinatura, marcarAssinaturaIndividual } from "./actions";
 import { PRODUTO_LABEL, type ProdutoCredenciamento } from "@/lib/estados";
 import type { ProdutoContrato } from "@/lib/juridico/contrato";
 
@@ -18,6 +13,23 @@ interface ContratoRegistro {
   gerado_em: string | null;
   assinado_em: string | null;
 }
+
+type PapelAssinatura = "strada_signatario" | "strada_testemunha" | "cliente_signatario" | "cliente_testemunha";
+
+interface AssinaturaRegistro {
+  id: string;
+  contrato_id: string;
+  papel: PapelAssinatura;
+  nome: string;
+  assinado_em: string | null;
+}
+
+const ROTULO_PAPEL: Record<PapelAssinatura, string> = {
+  strada_signatario: "Assina pela Strada",
+  strada_testemunha: "Testemunha (Strada)",
+  cliente_signatario: "Assina pelo cliente",
+  cliente_testemunha: "Testemunha (cliente)",
+};
 
 const STATUS_CONTRATO_LABEL: Record<ContratoRegistro["status"], string> = {
   RASCUNHO: "Rascunho gerado",
@@ -31,14 +43,72 @@ const STATUS_CONTRATO_COR: Record<ContratoRegistro["status"], string> = {
   ASSINADO: "bg-emerald-100 text-emerald-800",
 };
 
+function ListaAssinantes({
+  credenciamentoId,
+  contratoId,
+  assinaturas,
+}: {
+  credenciamentoId: string;
+  contratoId: string;
+  assinaturas: AssinaturaRegistro[];
+}) {
+  const [marcando, setMarcando] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function marcar(assinaturaId: string) {
+    setMarcando(assinaturaId);
+    setErro(null);
+    const resposta = await marcarAssinaturaIndividual(assinaturaId, contratoId, credenciamentoId);
+    setMarcando(null);
+    if (resposta.erro) setErro(resposta.erro);
+  }
+
+  const assinados = assinaturas.filter((a) => a.assinado_em).length;
+
+  return (
+    <div className="mt-3 border-t border-black/5 pt-3">
+      <p className="mb-2 text-xs font-medium text-strada-cinza">
+        {assinados} de {assinaturas.length} assinaram
+      </p>
+      <ul className="divide-y divide-black/5 rounded border border-black/10">
+        {assinaturas.map((a) => (
+          <li key={a.id} className="flex items-center justify-between gap-3 p-2 text-sm">
+            <div>
+              <span className="text-xs uppercase tracking-wide text-strada-cinza">{ROTULO_PAPEL[a.papel]}</span>
+              <p className="font-medium">{a.nome}</p>
+            </div>
+            {a.assinado_em ? (
+              <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                Assinado
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={() => marcar(a.id)}
+                disabled={marcando === a.id}
+                className="rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white disabled:opacity-60"
+              >
+                {marcando === a.id ? "Marcando…" : "Marcar como assinado"}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {erro && <p className="mt-2 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800">{erro}</p>}
+    </div>
+  );
+}
+
 function BlocoProduto({
   credenciamentoId,
   produto,
   contrato,
+  assinaturas,
 }: {
   credenciamentoId: string;
   produto: ProdutoContrato;
   contrato?: ContratoRegistro;
+  assinaturas: AssinaturaRegistro[];
 }) {
   const [gerando, setGerando] = useState(false);
   const [abrindo, setAbrindo] = useState(false);
@@ -70,15 +140,6 @@ function BlocoProduto({
     setAtualizando(true);
     setErro(null);
     const resposta = await marcarEnviadoParaAssinatura(contrato.id, credenciamentoId);
-    setAtualizando(false);
-    if (resposta.erro) setErro(resposta.erro);
-  }
-
-  async function assinar() {
-    if (!contrato) return;
-    setAtualizando(true);
-    setErro(null);
-    const resposta = await marcarAssinado(contrato.id, credenciamentoId);
     setAtualizando(false);
     if (resposta.erro) setErro(resposta.erro);
   }
@@ -127,20 +188,13 @@ function BlocoProduto({
             Marcar como enviado para assinatura
           </button>
         )}
-
-        {contrato?.status === "ENVIADO_PARA_ASSINATURA" && (
-          <button
-            type="button"
-            onClick={assinar}
-            disabled={atualizando}
-            className="rounded bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
-          >
-            Marcar como assinado
-          </button>
-        )}
       </div>
 
       {erro && <p className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-xs text-red-800">{erro}</p>}
+
+      {contrato && (contrato.status === "ENVIADO_PARA_ASSINATURA" || contrato.status === "ASSINADO") && (
+        <ListaAssinantes credenciamentoId={credenciamentoId} contratoId={contrato.id} assinaturas={assinaturas} />
+      )}
     </div>
   );
 }
@@ -149,10 +203,12 @@ export function ContratoPainel({
   credenciamentoId,
   produto,
   contratos,
+  assinaturas,
 }: {
   credenciamentoId: string;
   produto: ProdutoCredenciamento;
   contratos: ContratoRegistro[];
+  assinaturas: AssinaturaRegistro[];
 }) {
   const produtosParaGerar: ProdutoContrato[] =
     produto === "AMBOS" ? ["STRADA_PAY", "STRADA_LOG"] : [produto];
@@ -162,18 +218,18 @@ export function ContratoPainel({
       <h3 className="text-xs font-bold uppercase tracking-wide text-strada-vinho">
         Geração de contrato e assinatura
       </h3>
-      <p className="text-xs text-strada-cinza">
-        Assina pela Strada: Priscilla Helena Martins de Souza (Gerente Jurídico, procuração) — testemunha
-        Ernani Benedito Leque.
-      </p>
-      {produtosParaGerar.map((p) => (
-        <BlocoProduto
-          key={p}
-          credenciamentoId={credenciamentoId}
-          produto={p}
-          contrato={contratos.find((c) => c.produto === p)}
-        />
-      ))}
+      {produtosParaGerar.map((p) => {
+        const contrato = contratos.find((c) => c.produto === p);
+        return (
+          <BlocoProduto
+            key={p}
+            credenciamentoId={credenciamentoId}
+            produto={p}
+            contrato={contrato}
+            assinaturas={contrato ? assinaturas.filter((a) => a.contrato_id === contrato.id) : []}
+          />
+        );
+      })}
     </section>
   );
 }
