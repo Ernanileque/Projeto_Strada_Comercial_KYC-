@@ -43,8 +43,8 @@ export async function rodarAnaliseComercial(
     const dados = await buscarDadosParaAnalise(supabase, credenciamentoId);
     if ("erro" in dados) return dados;
 
-    const { cadastral, compliance, erros } = await rodarAnaliseCadastralCompliance(dados);
-    const resultado = montarResultadoValidador(cadastral, compliance, null, erros);
+    const { cadastral, compliance, analiseReceitaFederal, erros } = await rodarAnaliseCadastralCompliance(dados);
+    const resultado = montarResultadoValidador(cadastral, compliance, null, analiseReceitaFederal, erros);
 
     const { data: inserida, error: erroInsert } = await supabase
       .from("validacao")
@@ -101,6 +101,7 @@ export async function rodarAnaliseComercialReputacional(
       anterior.analiseCadastral,
       anterior.analiseCompliance,
       reputacional,
+      anterior.analiseReceitaFederal,
       erros,
     );
 

@@ -57,6 +57,54 @@ export function ResultadoValidadorDisplay({ resultado }: { resultado: ResultadoV
         </div>
       )}
 
+      {resultado.analiseReceitaFederal && (
+        <div>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs font-bold uppercase tracking-wide text-strada-vinho">
+              Verificação oficial (Receita Federal)
+            </h4>
+            <span className="text-[11px] text-strada-cinza">
+              Fonte: Receita Federal, via BrasilAPI — consultado em{" "}
+              {new Date(resultado.analiseReceitaFederal.consultadoEm).toLocaleString("pt-BR")}
+            </span>
+          </div>
+
+          {resultado.analiseReceitaFederal.encontrado ? (
+            <>
+              <span
+                className={`mb-2 inline-block rounded px-2 py-0.5 text-xs font-bold ${
+                  resultado.analiseReceitaFederal.situacaoCadastral?.toUpperCase() === "ATIVA"
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-red-100 text-red-800"
+                }`}
+              >
+                CNPJ {resultado.analiseReceitaFederal.situacaoCadastral ?? "situação desconhecida"}
+              </span>
+              <ul className="divide-y divide-black/5 rounded border border-black/10">
+                {resultado.analiseReceitaFederal.itens.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2 p-2 text-sm">
+                    <span
+                      className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                        item.gravidade === "atencao" ? "bg-red-100 text-red-800" : "bg-emerald-100 text-emerald-800"
+                      }`}
+                    >
+                      {item.gravidade === "atencao" ? "Atenção" : "OK"}
+                    </span>
+                    <p>
+                      <span className="font-medium">{item.campo}</span> — {item.descricao}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+              CNPJ {resultado.analiseReceitaFederal.cnpjConsultado} não localizado na Receita Federal.
+            </p>
+          )}
+        </div>
+      )}
+
       {resultado.analiseCompliance && (
         <div>
           <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-strada-vinho">

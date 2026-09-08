@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { DocumentoParaAnalise, ResultadoValidador } from "@/lib/compliance/validador";
+import type { DadosDeclaradosEmpresa } from "@/lib/receita/consulta";
 
 /**
  * Helpers de coleta de dados pro Validador IA — extraídos de
@@ -70,10 +71,24 @@ function montarFichaResumo(dados: Record<string, unknown>): string {
   return linhas.join("\n");
 }
 
+function extrairDadosDeclarados(dados: Record<string, unknown>): DadosDeclaradosEmpresa {
+  const empresa = (dados.empresa ?? {}) as Record<string, string>;
+  const endereco = (dados.endereco ?? {}) as Record<string, string>;
+  return {
+    cnpj: empresa.cnpj,
+    razaoSocial: empresa.razao,
+    municipio: endereco.municipio,
+    uf: endereco.uf,
+  };
+}
+
 export async function buscarDadosParaAnalise(
   supabase: Awaited<ReturnType<typeof createClient>>,
   credenciamentoId: string,
-): Promise<{ documentos: DocumentoParaAnalise[]; fichaResumo: string } | { erro: string }> {
+): Promise<
+  | { documentos: DocumentoParaAnalise[]; fichaResumo: string; dadosDeclarados: DadosDeclaradosEmpresa }
+  | { erro: string }
+> {
   const admin = createAdminClient();
 
   const { data: ficha } = await supabase
@@ -114,8 +129,10 @@ export async function buscarDadosParaAnalise(
     return { erro: "Não foi possível baixar nenhum documento do Storage pra análise." };
   }
 
-  const fichaResumo = montarFichaResumo((ficha?.dados_json ?? {}) as Record<string, unknown>);
-  return { documentos, fichaResumo };
+  const dadosJson = (ficha?.dados_json ?? {}) as Record<string, unknown>;
+  const fichaResumo = montarFichaResumo(dadosJson);
+  const dadosDeclarados = extrairDadosDeclarados(dadosJson);
+  return { documentos, fichaResumo, dadosDeclarados };
 }
 
 export function resultadoParaEnum(resultado: ResultadoValidador): "APTO" | "NAO_APTO" | "EM_ANALISE" {

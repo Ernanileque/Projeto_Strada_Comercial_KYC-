@@ -7,6 +7,12 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import {
+  consultarCnpjReceitaFederal,
+  compararComReceitaFederal,
+  type DadosDeclaradosEmpresa,
+  type ItemReceitaFederal,
+} from "@/lib/receita/consulta";
 
 const MODELO = "claude-sonnet-5";
 
@@ -71,10 +77,18 @@ export interface Veredicto {
   itensConferidos: number;
 }
 
+export interface AnaliseReceitaFederal {
+  consultadoEm: string;
+  cnpjConsultado: string;
+  encontrado: boolean;
+  situacaoCadastral: string | null;
+  itens: ItemReceitaFederal[];
+}
+
 export interface ErroValidador {
   codigo: string;
   mensagem: string;
-  etapa: "cadastral" | "compliance" | "reputacional";
+  etapa: "cadastral" | "compliance" | "reputacional" | "receita_federal";
 }
 
 export interface ResultadoValidador {
@@ -85,6 +99,7 @@ export interface ResultadoValidador {
   analiseCadastral: AnaliseCadastral | null;
   analiseCompliance: AnaliseCompliance | null;
   analiseReputacional: AnaliseReputacional | null;
+  analiseReceitaFederal: AnaliseReceitaFederal | null;
   erros: ErroValidador[] | null;
 }
 
@@ -349,6 +364,7 @@ function contarGravidade(
   cadastral: AnaliseCadastral,
   compliance: AnaliseCompliance,
   reputacional: AnaliseReputacional | null,
+  receitaFederal: AnaliseReceitaFederal | null,
 ): number {
   let total = cadastral.inconsistencias.filter((i) => i.gravidade === gravidade).length;
   total += compliance.beneficiarios.filter((b) => b.gravidade === gravidade).length;
@@ -357,21 +373,54 @@ function contarGravidade(
       (r) => r.gravidade === gravidade,
     ).length;
   }
+  if (receitaFederal) {
+    total += receitaFederal.itens.filter((i) => i.gravidade === gravidade).length;
+  }
   return total;
 }
 
 export interface OpcoesAnaliseBase {
   documentos: DocumentoParaAnalise[];
   fichaResumo: string;
+  dadosDeclarados?: DadosDeclaradosEmpresa;
 }
 
 interface ResultadoCadastralCompliance {
   cadastral: AnaliseCadastral | null;
   compliance: AnaliseCompliance | null;
+  analiseReceitaFederal: AnaliseReceitaFederal | null;
   erros: ErroValidador[];
 }
 
-/** Cadastral + compliance rodam em paralelo e voltam rápido — a parte lenta é a reputacional (busca na web), por isso ficou separada. */
+async function consultarReceitaFederal(
+  dadosDeclarados: DadosDeclaradosEmpresa,
+): Promise<AnaliseReceitaFederal> {
+  const oficial = dadosDeclarados.cnpj ? await consultarCnpjReceitaFederal(dadosDeclarados.cnpj) : null;
+
+  if (!oficial) {
+    return {
+      consultadoEm: new Date().toISOString(),
+      cnpjConsultado: dadosDeclarados.cnpj ?? "—",
+      encontrado: false,
+      situacaoCadastral: null,
+      itens: [],
+    };
+  }
+
+  return {
+    consultadoEm: new Date().toISOString(),
+    cnpjConsultado: oficial.cnpj,
+    encontrado: true,
+    situacaoCadastral: oficial.situacaoCadastral,
+    itens: compararComReceitaFederal(oficial, dadosDeclarados),
+  };
+}
+
+/**
+ * Cadastral + compliance (IA) e a consulta à Receita Federal
+ * (determinística, via BrasilAPI) rodam em paralelo — a reputacional
+ * (busca na web, mais lenta) fica separada, ver rodarAnaliseReputacional.
+ */
 export async function rodarAnaliseCadastralCompliance(
   opcoes: OpcoesAnaliseBase,
 ): Promise<ResultadoCadastralCompliance> {
@@ -380,10 +429,12 @@ export async function rodarAnaliseCadastralCompliance(
 
   let cadastral: AnaliseCadastral | null = null;
   let compliance: AnaliseCompliance | null = null;
+  let analiseReceitaFederal: AnaliseReceitaFederal | null = null;
 
-  const [resultadoCadastral, resultadoCompliance] = await Promise.allSettled([
+  const [resultadoCadastral, resultadoCompliance, resultadoReceita] = await Promise.allSettled([
     chamarAnalise<AnaliseCadastral>(client, opcoes.documentos, opcoes.fichaResumo, PROMPT_CADASTRAL),
     chamarAnalise<AnaliseCompliance>(client, opcoes.documentos, opcoes.fichaResumo, PROMPT_COMPLIANCE),
+    opcoes.dadosDeclarados?.cnpj ? consultarReceitaFederal(opcoes.dadosDeclarados) : Promise.resolve(null),
   ]);
 
   if (resultadoCadastral.status === "fulfilled") {
@@ -398,7 +449,17 @@ export async function rodarAnaliseCadastralCompliance(
     erros.push({ codigo: "ANALISE_COMPLIANCE_FALHOU", mensagem: String(resultadoCompliance.reason), etapa: "compliance" });
   }
 
-  return { cadastral, compliance, erros };
+  if (resultadoReceita.status === "fulfilled") {
+    analiseReceitaFederal = resultadoReceita.value;
+  } else {
+    erros.push({
+      codigo: "RECEITA_FEDERAL_FALHOU",
+      mensagem: String(resultadoReceita.reason),
+      etapa: "receita_federal",
+    });
+  }
+
+  return { cadastral, compliance, analiseReceitaFederal, erros };
 }
 
 // Cada entidade pesquisada sozinha, então poucas buscas já dão boa
@@ -468,6 +529,7 @@ export function montarResultadoValidador(
   cadastral: AnaliseCadastral | null,
   compliance: AnaliseCompliance | null,
   reputacional: AnaliseReputacional | null,
+  receitaFederal: AnaliseReceitaFederal | null,
   erros: ErroValidador[],
 ): ResultadoValidador {
   const empresa = cadastral?.empresa ?? compliance?.empresa ?? "Empresa não identificada";
@@ -486,12 +548,13 @@ export function montarResultadoValidador(
       analiseCadastral: cadastral,
       analiseCompliance: compliance,
       analiseReputacional: reputacional,
+      analiseReceitaFederal: receitaFederal,
       erros,
     };
   }
 
-  const atencoes = contarGravidade("atencao", cadastral, compliance, reputacional);
-  const conferidos = contarGravidade("ok", cadastral, compliance, reputacional);
+  const atencoes = contarGravidade("atencao", cadastral, compliance, reputacional, receitaFederal);
+  const conferidos = contarGravidade("ok", cadastral, compliance, reputacional, receitaFederal);
 
   let resultado: Veredicto["resultado"];
   if (atencoes > 0) resultado = "NÃO APTO";
@@ -511,6 +574,7 @@ export function montarResultadoValidador(
     analiseCadastral: cadastral,
     analiseCompliance: compliance,
     analiseReputacional: reputacional,
+    analiseReceitaFederal: receitaFederal,
     erros: erros.length ? erros : null,
   };
 }
