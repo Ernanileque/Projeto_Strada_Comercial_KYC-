@@ -4,6 +4,10 @@
  * social automaticamente. Aqui vai além: cruza os dados oficiais
  * contra o que o cliente declarou na ficha, como uma fonte
  * independente do que foi só extraído dos documentos anexados.
+ *
+ * PENDÊNCIA DE PRODUÇÃO: a BrasilAPI é um projeto open source/comunitário,
+ * sem SLA nem suporte contratual — adequado para a fase de testes, mas
+ * deve ser avaliado antes de virar produção (ver docs/pendencias-producao.md).
  */
 
 export interface DadosOficiaisReceitaFederal {
