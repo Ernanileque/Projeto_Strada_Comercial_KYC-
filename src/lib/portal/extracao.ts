@@ -468,7 +468,12 @@ export function extrairAdministradores(t: string, socios: SocioExtraido[]): Admi
   const out: AdministradorExtraido[] = [];
   const vistos = new Set<string>();
 
-  const g = /administrada\s+(?:isoladamente|em conjunto)?\s*pel[oa]s?\s+(?:administrador(?:es)?(?: n(?:ã|a)o s(?:ó|o)cios?)?|s(?:ó|o)ci[oa]s?)\s+([A-ZÀ-Ú][A-ZÀ-Ú'\s]{5,70}?),/gi;
+  // Cobre as variações de frase já vistas em contratos reais: "administrada
+  // pelo(s) administrador(es)/sócio(s) NOME," e "administrada por seu(s)/
+  // sua(s) sócio(s) Sr./Sra. NOME," (essa segunda forma, com "por seu" em
+  // vez de "pelo" e título antes do nome, passava batido antes).
+  const g =
+    /administrad[ao]\s+(?:isoladamente|em conjunto)?\s*(?:pel[oa]s?|por\s+se[us]s?|por\s+sua[s]?)\s+(?:administrador(?:es)?(?: n(?:ã|a)o s(?:ó|o)cios?)?|(?:n(?:ã|a)o\s+)?s(?:ó|o)ci[oa]s?)\s+(?:Sr\.?|Sra\.?|Dr\.?|Dra\.?)?\s*([A-ZÀ-Ú][A-ZÀ-Ú'\s]{5,70}?),/gi;
   let m: RegExpExecArray | null;
   while ((m = g.exec(t)) !== null) {
     const nome = tituloNome(limpa(m[1]));
