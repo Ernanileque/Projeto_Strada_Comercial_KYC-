@@ -492,14 +492,27 @@ export function extrairAdministradores(t: string, socios: SocioExtraido[]): Admi
       /administra(?:ç|c)(?:ã|a)o da sociedade ser(?:á|a) exercida:?\s*([\s\S]{0,4000}?)(?=DO BALAN|Par(?:á|a)grafo (?:Ú|U)nico\.\s*N(?:ã|a)o constituindo|CL(?:Á|A)USULA OITAVA)/i,
     ) || [])[1] || "";
   if (blocoAdm) {
-    const reAdm = /Pel[oa]s?\s+s(?:ó|o)ci[oa]s?\s+([A-ZÀ-Ú][A-ZÀ-Ú'\s]{5,70}?),/g;
+    // Aceita tanto "Pelo sócio NOME," quanto "Pelo não sócio NOME," — contratos
+    // com administrador profissional (não sócio) usam essa segunda forma, e
+    // antes o "não" no meio quebrava o casamento da regex, deixando o
+    // administrador de fora da lista de quem assina.
+    const reAdm = /Pel[oa]s?\s+(n(?:ã|a)o\s+)?s(?:ó|o)ci[oa]s?\s+([A-ZÀ-Ú][A-ZÀ-Ú'\s]{5,70}?),/g;
     let a: RegExpExecArray | null;
     while ((a = reAdm.exec(blocoAdm)) !== null) {
-      const nome = tituloNome(recortarNome(a[1]));
+      const naoSocio = !!a[1];
+      const nome = tituloNome(recortarNome(a[2]));
       if (vistos.has(nome)) continue;
       vistos.add(nome);
       const s = socios.find((x) => x.nome === nome);
-      out.push({ nome, cpf: s ? s.doc : "", email: "", cargo: "Sócio administrador — representa legalmente a sociedade" });
+      out.push({
+        nome,
+        cpf: s ? s.doc : "",
+        email: "",
+        cargo:
+          naoSocio || !s
+            ? "Administrador não sócio — representa legalmente a sociedade"
+            : "Sócio administrador — representa legalmente a sociedade",
+      });
     }
   }
 
