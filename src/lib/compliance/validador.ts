@@ -81,6 +81,8 @@ export interface AnaliseReceitaFederal {
   consultadoEm: string;
   cnpjConsultado: string;
   encontrado: boolean;
+  /** true quando a consulta falhou (rede/indisponibilidade) — encontrado=false aqui não é um "não encontrado" confirmado. */
+  falhaConsulta: boolean;
   situacaoCadastral: string | null;
   itens: ItemReceitaFederal[];
 }
@@ -395,13 +397,16 @@ interface ResultadoCadastralCompliance {
 async function consultarReceitaFederal(
   dadosDeclarados: DadosDeclaradosEmpresa,
 ): Promise<AnaliseReceitaFederal> {
-  const oficial = dadosDeclarados.cnpj ? await consultarCnpjReceitaFederal(dadosDeclarados.cnpj) : null;
+  const resultado = dadosDeclarados.cnpj
+    ? await consultarCnpjReceitaFederal(dadosDeclarados.cnpj)
+    : { dados: null, falhaConsulta: false };
 
-  if (!oficial) {
+  if (!resultado.dados) {
     return {
       consultadoEm: new Date().toISOString(),
       cnpjConsultado: dadosDeclarados.cnpj ?? "—",
       encontrado: false,
+      falhaConsulta: resultado.falhaConsulta,
       situacaoCadastral: null,
       itens: [],
     };
@@ -409,10 +414,11 @@ async function consultarReceitaFederal(
 
   return {
     consultadoEm: new Date().toISOString(),
-    cnpjConsultado: oficial.cnpj,
+    cnpjConsultado: resultado.dados.cnpj,
     encontrado: true,
-    situacaoCadastral: oficial.situacaoCadastral,
-    itens: compararComReceitaFederal(oficial, dadosDeclarados),
+    falhaConsulta: false,
+    situacaoCadastral: resultado.dados.situacaoCadastral,
+    itens: compararComReceitaFederal(resultado.dados, dadosDeclarados),
   };
 }
 

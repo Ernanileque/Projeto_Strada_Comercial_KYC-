@@ -37,10 +37,24 @@ interface RespostaBrasilApi {
   uf?: string;
 }
 
-/** Best-effort: qualquer falha (CNPJ não encontrado, rede, timeout) retorna null, nunca lança. */
-export async function consultarCnpjReceitaFederal(cnpj: string): Promise<DadosOficiaisReceitaFederal | null> {
+export interface ResultadoConsultaCnpj {
+  dados: DadosOficiaisReceitaFederal | null;
+  /**
+   * true quando a consulta em si falhou (rede, timeout, indisponibilidade,
+   * resposta malformada) — não dá pra concluir nada sobre o CNPJ. Diferente
+   * de dados === null com falhaConsulta === false, que é uma resposta
+   * negativa confirmada (CNPJ realmente não encontrado na Receita). Sem
+   * essa distinção, uma instabilidade pontual da BrasilAPI (sem SLA, ver
+   * pendência no topo do arquivo) aparecia pro analista como "CNPJ não
+   * localizado", como se o CNPJ fosse inválido.
+   */
+  falhaConsulta: boolean;
+}
+
+/** Best-effort: nunca lança — falhas de rede/indisponibilidade vêm marcadas em falhaConsulta. */
+export async function consultarCnpjReceitaFederal(cnpj: string): Promise<ResultadoConsultaCnpj> {
   const digitos = cnpj.replace(/\D/g, "");
-  if (digitos.length !== 14) return null;
+  if (digitos.length !== 14) return { dados: null, falhaConsulta: false };
 
   try {
     const controller = new AbortController();
@@ -50,25 +64,29 @@ export async function consultarCnpjReceitaFederal(cnpj: string): Promise<DadosOf
     });
     clearTimeout(timeout);
 
-    if (!resposta.ok) return null;
+    if (resposta.status === 404) return { dados: null, falhaConsulta: false };
+    if (!resposta.ok) return { dados: null, falhaConsulta: true };
     const dados: RespostaBrasilApi = await resposta.json();
-    if (!dados.razao_social) return null;
+    if (!dados.razao_social) return { dados: null, falhaConsulta: true };
 
     return {
-      cnpj: digitos,
-      razaoSocial: dados.razao_social,
-      nomeFantasia: dados.nome_fantasia || null,
-      situacaoCadastral: dados.descricao_situacao_cadastral || null,
-      dataSituacaoCadastral: dados.data_situacao_cadastral || null,
-      dataInicioAtividade: dados.data_inicio_atividade || null,
-      capitalSocial: dados.capital_social ?? null,
-      cnaeFiscalDescricao: dados.cnae_fiscal_descricao || null,
-      porte: dados.porte || null,
-      municipio: dados.municipio || null,
-      uf: dados.uf || null,
+      falhaConsulta: false,
+      dados: {
+        cnpj: digitos,
+        razaoSocial: dados.razao_social,
+        nomeFantasia: dados.nome_fantasia || null,
+        situacaoCadastral: dados.descricao_situacao_cadastral || null,
+        dataSituacaoCadastral: dados.data_situacao_cadastral || null,
+        dataInicioAtividade: dados.data_inicio_atividade || null,
+        capitalSocial: dados.capital_social ?? null,
+        cnaeFiscalDescricao: dados.cnae_fiscal_descricao || null,
+        porte: dados.porte || null,
+        municipio: dados.municipio || null,
+        uf: dados.uf || null,
+      },
     };
   } catch {
-    return null;
+    return { dados: null, falhaConsulta: true };
   }
 }
 

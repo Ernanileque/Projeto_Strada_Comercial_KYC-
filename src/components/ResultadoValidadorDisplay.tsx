@@ -97,6 +97,11 @@ export function ResultadoValidadorDisplay({ resultado }: { resultado: ResultadoV
                 ))}
               </ul>
             </>
+          ) : resultado.analiseReceitaFederal.falhaConsulta ? (
+            <p className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Não foi possível consultar a Receita Federal agora (falha temporária na BrasilAPI) — confira o CNPJ{" "}
+              {resultado.analiseReceitaFederal.cnpjConsultado} manualmente e repita a análise mais tarde.
+            </p>
           ) : (
             <p className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               CNPJ {resultado.analiseReceitaFederal.cnpjConsultado} não localizado na Receita Federal.
