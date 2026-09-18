@@ -663,13 +663,32 @@ export function extrairQsa(t: string): QsaPessoa[] {
 }
 
 /* ---------- orquestrador ---------- */
+
+/**
+ * Alguns PDFs (ex.: gerados pela Junta Comercial de MT) embutem uma
+ * camada de texto com o encoding trocado — o texto tem tamanho normal,
+ * mas letras acentuadas viram caracteres estranhos (ex.: "não" vira
+ * "nªo", "ALTERAÇÃO" vira "ALTERA˙ˆO", "único" vira "œnico"). Como o
+ * texto continua "grande", a checagem de tamanho sozinha não detecta
+ * o problema, e a extração falha silenciosamente (a regex procura
+ * "não sócio" e nunca vai achar "nªo sócio"). Esses caracteres
+ * (˙ ˆ œ Æ ı) não aparecem em português normal — sinalizam esse tipo
+ * de corrupção com segurança, sem risco de falso positivo. Detectar
+ * isso aqui joga o documento pro fallback de OCR, que lê os pixels
+ * renderizados (corretos) em vez do texto corrompido.
+ */
+function pareceTextoCorrompido(t: string): boolean {
+  const sinais = t.match(/[˙ˆœÆı]/g);
+  return !!sinais && sinais.length >= 3;
+}
+
 export function analisar(texto: string, nomeArquivo: string): ResultadoAnalise {
   const t = norm(texto);
   const tipo = classificar(t, nomeArquivo);
   const r: ResultadoAnalise = {
     tipo,
     arquivo: nomeArquivo,
-    temTexto: t.length > 400,
+    temTexto: t.length > 400 && !pareceTextoCorrompido(t),
     empresa: {},
     socios: [],
     admins: [],
