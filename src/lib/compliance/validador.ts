@@ -331,7 +331,14 @@ async function chamarAnaliseUmaVez<T>(
           ...blocosDocumentos(documentos),
           {
             type: "text",
+            // Documentos + ficha são idênticos entre a chamada cadastral e a
+            // de compliance (só o prompt final muda) e se repetem quando o
+            // mesmo credenciamento é reanalisado (retry automático, ou
+            // Compliance reabrindo a mesma análise minutos depois). Marcar
+            // o fim desse prefixo comum como ponto de cache evita pagar de
+            // novo pela leitura dos PDFs anexados nesses casos.
             text: `Dados declarados na ficha cadastral preenchida pelo cliente (não é um documento anexado, mas texto informado por ele):\n${fichaResumo}`,
+            cache_control: { type: "ephemeral" },
           },
           { type: "text", text: prompt },
         ],
