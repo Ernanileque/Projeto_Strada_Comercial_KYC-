@@ -337,7 +337,10 @@ export function extrairSocios(t: string): SocioExtraido[] {
     const anuente = /anu(?:ê|e)ncia (?:de|da) sua? (?:esposa|c(?:ô|o)njuge|marido|companheir[ao])\s*$|anuente/i.test(
       antes,
     );
-    const nasc = (bloco.match(/nascid[oa] em (\d{2}\/\d{2}\/\d{4})/i) || [])[1] || "";
+    // "nascido aos DD/MM/AAAA" é tão comum quanto "nascido em" em
+    // contratos reais — faltava aqui e deixava a data de nascimento em
+    // branco mesmo com o sócio corretamente identificado.
+    const nasc = (bloco.match(/nascid[oa] (?:em|aos) (\d{2}\/\d{2}\/\d{4})/i) || [])[1] || "";
     socios.push({
       pessoa: "PF",
       nome: tituloNome(recortarNome(m[1])),
@@ -364,7 +367,8 @@ export function extrairSocios(t: string): SocioExtraido[] {
     if (vistos.has(cpfDoc)) continue;
     vistos.add(cpfDoc);
     const bloco = m[0];
-    const nasc = (bloco.match(/(?:data de nascimento|nascid[oa] em)\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1] || "";
+    const nasc =
+      (bloco.match(/(?:data de nascimento|nascid[oa] (?:em|aos))\s*(\d{2}\/\d{2}\/\d{4})/i) || [])[1] || "";
     const nac = m[2].toUpperCase().startsWith("BRASIL") ? "Brasileira" : tituloNome(m[2]);
     socios.push({
       pessoa: "PF",
