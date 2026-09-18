@@ -2,8 +2,37 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PRODUTO_LABEL, type ProdutoCredenciamento } from "@/lib/estados";
+import type { CondicoesPay, CondicoesLog } from "@/lib/comercial/proposta";
 import { VerDocumentoBotao } from "../../compliance/VerDocumentoBotao";
 import { ImplantacaoPainel } from "./ImplantacaoPainel";
+
+const ROTULO_PAY: Record<keyof CondicoesPay, string> = {
+  taxaFrete: "Taxa administrativa Frete",
+  semParar: "Sem Parar",
+  moveMais: "Move Mais",
+  taggyStrada: "Taggy Strada",
+};
+
+const ROTULO_LOG: Record<keyof CondicoesLog, string> = {
+  gestaoPerformance: "Gestão de Performance/lote",
+  matchCargas: "Match de Cargas",
+  trocaNota: "Troca Nota",
+  gerenciamentoRisco: "Gerenciamento de Risco",
+  portariaTracking: "Módulo Portaria Tracking",
+  bid: "BID",
+};
+
+/** Só os campos que o Comercial de fato preencheu na negociação — o resto fica de fora do resumo. */
+function itensPreenchidos<T extends object>(
+  valores: T | null | undefined,
+  rotulos: Record<keyof T, string>,
+): { rotulo: string; valor: string }[] {
+  if (!valores) return [];
+  const registro = valores as Record<string, string | undefined | null>;
+  return (Object.keys(rotulos) as (keyof T & string)[])
+    .map((chave) => ({ rotulo: rotulos[chave], valor: (registro[chave] ?? "").toString().trim() }))
+    .filter((item) => item.valor);
+}
 
 const ROTULO_TIPO_DOCUMENTO: Record<string, string> = {
   contrato_social: "Contrato social",
@@ -36,7 +65,7 @@ export default async function CredenciamentoImplantacaoPage({
   const { data: credenciamento } = await supabase
     .from("credenciamento")
     .select(
-      "id, status, produto, cliente:cliente_id(razao_social, cnpj, contato_nome, contato_email, contato_fone)",
+      "id, status, produto, condicoes_comerciais, cliente:cliente_id(razao_social, cnpj, contato_nome, contato_email, contato_fone)",
     )
     .eq("id", id)
     .single();
@@ -64,6 +93,16 @@ export default async function CredenciamentoImplantacaoPage({
     contato_fone: string | null;
   };
 
+  const condicoesComerciais = credenciamento.condicoes_comerciais as unknown as {
+    vtf?: string | null;
+    pay?: CondicoesPay | null;
+    log?: CondicoesLog | null;
+  } | null;
+  const itensPay = itensPreenchidos(condicoesComerciais?.pay, ROTULO_PAY);
+  const itensLog = itensPreenchidos(condicoesComerciais?.log, ROTULO_LOG);
+  const vtf = condicoesComerciais?.vtf?.trim();
+  const temResumoComercial = !!vtf || itensPay.length > 0 || itensLog.length > 0;
+
   return (
     <div className="max-w-3xl space-y-4">
       <div className="flex items-start justify-between">
@@ -75,6 +114,36 @@ export default async function CredenciamentoImplantacaoPage({
         </div>
         <StatusBadge status={credenciamento.status} />
       </div>
+
+      {temResumoComercial && (
+        <div className="rounded border border-amber-300 bg-amber-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-wide text-amber-900">
+            Resumo comercial — o que foi oferecido ao cliente
+          </p>
+          <div className="mt-2 space-y-1.5 text-sm text-amber-950">
+            {vtf && (
+              <p>
+                <span className="font-medium">VTF estimado:</span> R$ {vtf}/mês
+              </p>
+            )}
+            {itensPay.length > 0 && (
+              <p>
+                <span className="font-medium">Strada Pay:</span>{" "}
+                {itensPay.map((item) => `${item.rotulo} ${item.valor}%`).join(" · ")}
+              </p>
+            )}
+            {itensLog.length > 0 && (
+              <p>
+                <span className="font-medium">Strada Log:</span>{" "}
+                {itensLog.map((item) => `${item.rotulo}: ${item.valor}`).join(" · ")}
+              </p>
+            )}
+          </div>
+          <p className="mt-2 text-[11px] text-amber-800">
+            Confira as condições completas na proposta comercial anexada abaixo.
+          </p>
+        </div>
+      )}
 
       <ImplantacaoPainel
         credenciamentoId={credenciamento.id}
