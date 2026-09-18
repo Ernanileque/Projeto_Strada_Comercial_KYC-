@@ -219,11 +219,16 @@ export function extrairEmpresa(t: string): DadosEmpresaExtraidos {
     }
   }
 
-  m = t.match(/[Cc]apital [Ss]ocial (?:é|e)(?: de)? R\$ ?([\d.]+,\d{2})/);
+  // Além de "capital social é de R$", contratos mais recentes (ex.: modelo
+  // usado pela Junta Comercial de MT em 2026) usam "capital da empresa é
+  // de R$" — sem a palavra "social" — e não batiam com a regex antiga.
+  m = t.match(/[Cc]apital (?:[Ss]ocial|da empresa|da sociedade) (?:é|e)(?: de)? R\$ ?([\d.]+,\d{2})/);
   if (m) d.capital = m[1];
   m = t.match(/(?:dividido em|composto de) ([\d.]+)/i);
   if (m) d.quotasTotal = m[1];
-  m = t.match(/valor nominal(?: de)? R\$ ?([\d.]+,\d{2}|\d+,\d{2})/i);
+  // Idem para o valor da quota: "valor nominal" e "valor unitário" são
+  // sinônimos usados por contratos diferentes para o mesmo dado.
+  m = t.match(/valor (?:nominal|unit[aá]rio)(?: de)? R\$ ?([\d.]+,\d{2}|\d+,\d{2})/i);
   if (m) d.quotaValor = m[1];
 
   m =
@@ -308,8 +313,19 @@ export function extrairSocios(t: string): SocioExtraido[] {
   const socios: SocioExtraido[] = [];
   const vistos = new Set<string>();
 
+  // "CPF" às vezes vem como "CPF/MF" (referência antiga ao Ministério da
+  // Fazenda) e "sob" pode vir sem o artigo ("sob nº" em vez de "sob o
+  // nº") — variações vistas em contratos reais que quebravam a captura
+  // do CPF e, com isso, o sócio inteiro passava batido.
+  // O fim do endereço é reconhecido pelo ponto seguido de uma nova frase
+  // em maiúsculas (heading de cláusula, "Mediante", etc.) — mas em contrato
+  // de sócio único a frase seguinte costuma ser "Sócio único da
+  // Sociedade..."/"Resolve constituir...", que começa só com a primeira
+  // letra maiúscula e por isso não batia em "[A-ZÀ-Ú]{2,}", fazendo o
+  // endereço "vazar" e a regex inteira falhar por estourar o limite de
+  // 260 caracteres do grupo.
   const rePF =
-    /([A-ZÀ-Ú][A-ZÀ-Ú'\s]{5,70}?),\s*brasileir[ao][^;]{0,700}?CPF (?:sob o|sob a)? ?n?[º°o.]* ?(\d{3}\.\d{3}\.\d{3}-\d{2})[^;]{0,400}?residente e domiciliad[oa] n[ao] (.{15,260}?)(?:;|\.\s*(?:[A-ZÀ-Ú]{2,}|Mediante|DA |CL(?:Á|A)USULA))/g;
+    /([A-ZÀ-Ú][A-ZÀ-Ú'\s]{5,70}?),\s*brasileir[ao][^;]{0,700}?CPF(?:\/MF)?\s*(?:sob\s+(?:o\s+|a\s+)?)?n?[º°o.]*\s*(\d{3}\.\d{3}\.\d{3}-\d{2})[^;]{0,400}?residente e domiciliad[oa] n[ao] (.{15,260}?)(?:;|\.\s*(?:[A-ZÀ-Ú]{2,}|Mediante|DA |CL(?:Á|A)USULA|S(?:ó|o)ci[oa]s?\s+(?:único|única|da\s)|Resolve))/g;
   let m: RegExpExecArray | null;
   while ((m = rePF.exec(t)) !== null) {
     const cpfDoc = m[2];
@@ -342,7 +358,7 @@ export function extrairSocios(t: string): SocioExtraido[] {
   }
 
   const rePF2 =
-    /([A-ZÀ-Ú][A-ZÀ-Ú'&.\s]{5,80}?),\s*nacionalidade\s+([A-ZÀ-Ú]{4,20})[^;]{0,400}?CPF\s*(?:sob o )?n?[º°o.]*\s*(\d{3}\.\d{3}\.\d{3}-\d{2})[^;]{0,400}?(?:com domic(?:í|i)lio\s*\/?\s*resid(?:ê|e)ncia|residente e domiciliad[oa])\s*(?:[aà]|na|no|em)?\s*(.{15,260}?)(?=\.\s|;)/g;
+    /([A-ZÀ-Ú][A-ZÀ-Ú'&.\s]{5,80}?),\s*nacionalidade\s+([A-ZÀ-Ú]{4,20})[^;]{0,400}?CPF(?:\/MF)?\s*(?:sob\s+(?:o\s+|a\s+)?)?n?[º°o.]*\s*(\d{3}\.\d{3}\.\d{3}-\d{2})[^;]{0,400}?(?:com domic(?:í|i)lio\s*\/?\s*resid(?:ê|e)ncia|residente e domiciliad[oa])\s*(?:[aà]|na|no|em)?\s*(.{15,260}?)(?=\.\s|;)/g;
   while ((m = rePF2.exec(t)) !== null) {
     const cpfDoc = m[3];
     if (vistos.has(cpfDoc)) continue;
