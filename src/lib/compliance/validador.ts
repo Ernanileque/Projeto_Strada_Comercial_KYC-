@@ -473,6 +473,42 @@ export async function rodarAnaliseCadastralCompliance(
 // número de buscas por entidade.
 const MAX_BUSCAS_POR_ENTIDADE = 2;
 
+/**
+ * O paralelismo entre entidades (ver rodarAnaliseReputacional) só ajuda
+ * se NENHUMA entidade travar sozinha por muito tempo — o tempo total é
+ * o da mais lenta, então uma busca que trave (rede lenta do lado da
+ * Claude, página fora do ar, etc.) ainda estoura os 120s da rota e mata
+ * a função inteira, derrubando o resultado de TODAS as entidades
+ * (inclusive as que já tinham terminado) com o erro genérico de conexão.
+ * Por isso cada entidade tem seu próprio prazo: se estourar, ela falha
+ * sozinha e degrada pra "não concluído a tempo" (mesmo tratamento já
+ * usado pra qualquer outra falha pontual), sem afetar as demais nem
+ * arriscar o teto da rota. 90s deixa margem confortável pra leitura/
+ * gravação no Supabase antes e depois, dentro do limite de 120s.
+ */
+const TIMEOUT_POR_ENTIDADE_MS = 90_000;
+
+class TempoEsgotadoError extends Error {}
+
+function comPrazo<T>(promessa: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new TempoEsgotadoError(`Pesquisa não concluída em ${ms}ms`)),
+      ms,
+    );
+    promessa.then(
+      (valor) => {
+        clearTimeout(timer);
+        resolve(valor);
+      },
+      (erro) => {
+        clearTimeout(timer);
+        reject(erro);
+      },
+    );
+  });
+}
+
 export interface OpcoesAnaliseReputacional {
   empresa: string;
   pessoas: string[];
@@ -488,12 +524,15 @@ async function pesquisarEntidade(
   nome: string,
   tipoEntidade: "EMPRESA" | "PESSOA",
 ): Promise<ResultadoEntidadeReputacional> {
-  return chamarAnalise<ResultadoEntidadeReputacional>(
-    client,
-    [],
-    `Nome a pesquisar: ${nome}`,
-    promptReputacionalEntidade(tipoEntidade),
-    [{ type: "web_search_20260318", name: "web_search", max_uses: MAX_BUSCAS_POR_ENTIDADE }],
+  return comPrazo(
+    chamarAnalise<ResultadoEntidadeReputacional>(
+      client,
+      [],
+      `Nome a pesquisar: ${nome}`,
+      promptReputacionalEntidade(tipoEntidade),
+      [{ type: "web_search_20260318", name: "web_search", max_uses: MAX_BUSCAS_POR_ENTIDADE }],
+    ),
+    TIMEOUT_POR_ENTIDADE_MS,
   );
 }
 
